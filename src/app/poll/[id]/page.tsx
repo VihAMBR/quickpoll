@@ -25,6 +25,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }, [])
 
   const fetchPollData = async () => {
+    if (!supabase) return
+    
     try {
       // Fetch poll
       const { data: pollData, error: pollError } = await supabase
@@ -78,6 +80,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }
 
   const checkUserVote = async () => {
+    if (!supabase) return
+    
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user?.id) return
 
@@ -95,6 +99,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }
 
   const setupRealtimeSubscription = () => {
+    if (!supabase) return
+    
     const votesSubscription = supabase
       .channel('votes')
       .on('postgres_changes', {
@@ -108,11 +114,13 @@ export default function PollPage({ params }: { params: { id: string } }) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(votesSubscription)
+      supabase?.removeChannel(votesSubscription)
     }
   }
 
   const submitVote = async (optionId: string) => {
+    if (!supabase) return
+    
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user?.id) {

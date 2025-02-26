@@ -24,6 +24,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkUser = async () => {
+      if (!supabase) {
+        router.push('/')
+        return
+      }
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         router.push('/')
@@ -35,6 +39,8 @@ export default function DashboardPage() {
   }, [router])
 
   const fetchDashboardData = async (userId: string) => {
+    if (!supabase) return
+    
     try {
       // Fetch polls created by user
       const { data: polls } = await supabase
