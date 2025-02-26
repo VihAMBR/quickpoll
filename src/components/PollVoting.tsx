@@ -198,10 +198,17 @@ export function PollVoting({
                   if (selectedChoice) {
                     setIsSubmitting(true);
                     try {
+                      console.log('Submitting vote for option:', selectedChoice);
                       await submitVote(selectedChoice);
+                      console.log('Vote submitted successfully');
                       setSelectedChoice(null);
                     } catch (error) {
                       console.error('Error submitting vote:', error);
+                      toast({
+                        title: "Error",
+                        description: "Failed to submit vote. Please try again.",
+                        variant: "destructive"
+                      });
                     } finally {
                       setIsSubmitting(false);
                     }

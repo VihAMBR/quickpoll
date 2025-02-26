@@ -7,6 +7,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { Poll, Option } from '@/types/database.types'
 import { useToast } from '@/components/ui/use-toast'
 import { NameDialog } from '@/components/ui/name-dialog'
+import { v4 as uuidv4 } from 'uuid'
 
 export default function PollPage({ params }: { params: { id: string } }) {
   console.log('Poll ID:', params.id);
@@ -41,16 +42,24 @@ export default function PollPage({ params }: { params: { id: string } }) {
     console.log('Setting up realtime subscriptions:', channelId)
 
     const channel = supabase.channel(channelId)
-      // Subscribe to vote changes
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'votes',
           filter: `poll_id=eq.${params.id}`
         },
         async (payload) => {
+          console.log('Received vote:', payload)
+          const vote = payload.new
+          
+          // Update vote counts
+          setVotes(prev => ({
+            ...prev,
+            [vote.option_id]: (prev[vote.option_id] || 0) + 1
+          }))
+          setTotalVotes(prev => prev + 1)
           console.log('Vote change detected:', payload)
           if (!supabase) return
 
@@ -206,27 +215,51 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Validate if a string is a valid UUID
+  const isValidUUID = (uuid: string) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    return uuidRegex.test(uuid)
+  }
+
   const checkUserVote = async () => {
     if (!supabase) return
     
     // Get user session and client ID
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
-    const clientId = localStorage.getItem('anonymous_client_id')
+    let clientId = localStorage.getItem('anonymous_client_id')
     const userName = localStorage.getItem('anonymous_user_name')
 
-    if (!userId && (!clientId || !userName)) {
+    // Clear invalid client ID
+    if (clientId && !isValidUUID(clientId)) {
+      localStorage.removeItem('anonymous_client_id')
+      clientId = null
+    }
+
+    // Generate new client ID if needed
+    if (!userId && !clientId) {
+      clientId = uuidv4()
+      localStorage.setItem('anonymous_client_id', clientId)
+    }
+
+    // Show name dialog only if we don't have a username
+    if (!userId && !userName) {
       setShowNameDialog(true)
       return
     }
 
-    // Check for existing vote using user_id or client_id
-    const { data } = await supabase
+    // Check for existing vote
+    const { data, error } = await supabase
       .from('votes')
       .select('option_id')
       .eq('poll_id', params.id)
-      .eq(userId ? 'user_id' : 'client_id', userId || clientId)
+      .eq(userId ? 'user_id' : 'client_id', userId || clientId || '')
       .maybeSingle()
+
+    if (error) {
+      console.error('Error checking vote:', error)
+      return
+    }
 
     if (data) {
       setHasVoted(true)
@@ -235,7 +268,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }
 
   const handleNameSubmit = (name: string) => {
-    const clientId = `${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`
+    const clientId = `anon_${Date.now()}`
     localStorage.setItem('anonymous_client_id', clientId)
     localStorage.setItem('anonymous_user_name', name)
     setShowNameDialog(false)
@@ -244,14 +277,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
 
   const submitVote = async (optionId: string): Promise<void> => {
     if (!supabase) return
-    
-    // Check if we have a name for anonymous users
-    const { data: { session } } = await supabase.auth.getSession()
-    const userId = session?.user?.id
-    if (!userId && !localStorage.getItem('anonymous_user_name')) {
-      setShowNameDialog(true)
-      return
-    }
     
     try {
       // Check if poll has ended
@@ -268,19 +293,60 @@ export default function PollPage({ params }: { params: { id: string } }) {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
       let clientId = localStorage.getItem('anonymous_client_id')
+      const userName = localStorage.getItem('anonymous_user_name')
       
-      if (!userId && !clientId) {
-        clientId = crypto.randomUUID()
-        localStorage.setItem('anonymous_client_id', clientId)
+      // Clear invalid client ID and generate new one if needed
+      if (!userId) {
+        if (!clientId || !isValidUUID(clientId)) {
+          // Generate a proper UUID
+          clientId = uuidv4()
+          localStorage.setItem('anonymous_client_id', clientId)
+        }
+        // Show name dialog for anonymous users without a name
+        if (!userName) {
+          setShowNameDialog(true)
+          return
+        }
       }
 
+      // Ensure clientId is a valid UUID if we're using it
+      if (!userId && (!clientId || !isValidUUID(clientId))) {
+        console.error('Invalid client ID:', clientId)
+        toast({
+          title: "Error",
+          description: "There was an error with your session. Please try again.",
+          variant: "destructive"
+        })
+        localStorage.removeItem('anonymous_client_id')
+        return
+      }
+
+      // Log the current state
+      console.log('Current state:', {
+        userId,
+        clientId,
+        userName,
+        pollId: params.id,
+        optionId
+      })
+
       // Check for existing vote
-      const { data: existingVote } = await supabase
+      const { data: existingVote, error: checkError } = await supabase
         .from('votes')
         .select('id')
         .eq('poll_id', params.id)
-        .eq(userId ? 'user_id' : 'client_id', userId || clientId)
+        .eq(userId ? 'user_id' : 'client_id', userId || clientId || '')
         .maybeSingle()
+
+      if (checkError) {
+        console.error('Error checking vote:', checkError)
+        toast({
+          title: "Error",
+          description: "Failed to check existing vote",
+          variant: "destructive"
+        })
+        return
+      }
 
       console.log('Checking vote:', {
         pollId: params.id,
@@ -298,60 +364,55 @@ export default function PollPage({ params }: { params: { id: string } }) {
         return
       }
 
-      // Create vote object
-      const newVote = {
+      // Prepare vote data
+      const voteData = {
         poll_id: params.id,
         option_id: optionId,
-        user_id: userId || null,
-        client_id: userId ? null : clientId,
         created_at: new Date().toISOString()
       }
 
-      console.log('Submitting vote:', newVote)
-
-      // Submit to database
-      const { error } = await supabase
-        .from('votes')
-        .insert(newVote)
-
-      if (error) {
-        console.error('Error submitting vote:', error)
+      // Add either user_id or client_id, but not both
+      if (userId) {
+        Object.assign(voteData, { user_id: userId, client_id: null })
+      } else if (clientId && isValidUUID(clientId)) {
+        Object.assign(voteData, { user_id: null, client_id: clientId })
+      } else {
+        console.error('No valid user_id or client_id')
         toast({
           title: "Error",
-          description: error.message,
+          description: "There was an error with your session. Please try again.",
           variant: "destructive"
         })
         return
       }
 
-      // Update UI after successful submission
-      setHasVoted(true)
-      setSelectedOption(optionId)
+      console.log('Submitting vote:', voteData)
 
-      // Fetch fresh vote counts
-      const { data: votesData, error: votesError } = await supabase
+      const { data: insertData, error: insertError } = await supabase
         .from('votes')
-        .select('option_id')
-        .eq('poll_id', params.id)
+        .insert([voteData])
+        .select('id, poll_id, option_id')
 
-      if (votesError) {
-        console.error('Error fetching votes:', votesError)
-        throw votesError
+      if (insertError) {
+        console.error('Error submitting vote:', insertError)
+        toast({
+          title: "Error",
+          description: "Failed to submit vote. Please try again.",
+          variant: "destructive"
+        })
+        return
       }
 
-      // Count votes per option
-      const voteCounts: Record<string, number> = {}
-      options.forEach(option => {
-        voteCounts[option.id] = 0
-      })
-      votesData?.forEach(vote => {
-        voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
-      })
+      console.log('Vote submitted successfully:', insertData)
 
-      setVotes(voteCounts)
-      setTotalVotes(votesData?.length || 0)
-
-
+      // Update local state
+      setHasVoted(true)
+      setSelectedOption(optionId)
+      setVotes(prev => ({
+        ...prev,
+        [optionId]: (prev[optionId] || 0) + 1
+      }))
+      setTotalVotes(prev => prev + 1)
 
       toast({
         title: "Success",
@@ -371,7 +432,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
     <LoadingSpinner />
   ) : (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
-      {showNameDialog && <NameDialog onSubmit={handleNameSubmit} />}
+      <NameDialog open={showNameDialog} onSubmit={handleNameSubmit} />
       <div className="w-full max-w-2xl">
         <PollVoting
           poll={poll}

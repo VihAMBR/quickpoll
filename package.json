@@ -24,6 +24,7 @@
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.39.3",
+    "@types/uuid": "^10.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
@@ -37,7 +38,8 @@
     "react-dom": "^18.2.0",
     "shadcn-ui": "^0.9.4",
     "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.16",
@@ -45,6 +47,7 @@
     "@types/react-dom": "^18.2.18",
     "autoprefixer": "^10.4.17",
     "postcss": "^8.4.35",
+    "supabase": "^2.15.8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"
   }

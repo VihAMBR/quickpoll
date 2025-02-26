@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 
 interface NameDialogProps {
   onSubmit: (name: string) => void;
+  open?: boolean;
 }
 
-export function NameDialog({ onSubmit }: NameDialogProps) {
+export function NameDialog({ onSubmit, open = true }: NameDialogProps) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
@@ -27,7 +28,7 @@ export function NameDialog({ onSubmit }: NameDialogProps) {
   };
 
   return (
-    <Dialog open={true}>
+    <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Enter Your Name</DialogTitle>
