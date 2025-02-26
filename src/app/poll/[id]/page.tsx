@@ -210,16 +210,21 @@ export default function PollPage({ params }: { params: { id: string } }) {
     // Get user session and client ID
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
-    const clientId = userId || localStorage.getItem('anonymous_client_id')
+    const clientId = localStorage.getItem('anonymous_client_id')
 
-    if (!userId && !clientId) return
+    if (!userId && !clientId) {
+      // Generate client ID for new anonymous users
+      const newClientId = crypto.randomUUID()
+      localStorage.setItem('anonymous_client_id', newClientId)
+      return
+    }
 
     // Check for existing vote using user_id or client_id
     const { data } = await supabase
       .from('votes')
       .select('option_id')
       .eq('poll_id', params.id)
-      .or(`user_id.eq.${userId},client_id.eq.${clientId}`)
+      .or(userId ? `user_id.eq.${userId}` : `client_id.eq.${clientId}`)
       .maybeSingle()
 
     if (data) {
@@ -257,7 +262,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .from('votes')
         .select('id')
         .eq('poll_id', params.id)
-        .or(`user_id.eq.${userId},client_id.eq.${clientId}`)
+        .or(userId ? `user_id.eq.${userId}` : `client_id.eq.${clientId}`)
         .maybeSingle()
 
       if (existingVote) {

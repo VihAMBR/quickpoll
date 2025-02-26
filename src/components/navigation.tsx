@@ -20,9 +20,9 @@ export function Navigation({ hideAuth = false }: NavigationProps) {
   return (
     <nav className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-[1200px] rounded-lg bg-[hsl(var(--nav-bg))] bg-opacity-20 backdrop-blur-[2px] supports-[backdrop-filter]:bg-opacity-20 shadow-lg dark:shadow-white/10 border-[1.5px] border-border/30">
       <div className="flex h-[72px] items-center px-6">
-        <div className="mr-4 hidden md:flex">
+        <div className="mr-4 flex">
           <Link href="/" className="mr-8 flex items-center space-x-2">
-            <span className="hidden font-bold text-xl sm:inline-block text-blue-600 dark:text-blue-400">QuickPoll</span>
+            <span className="font-bold text-xl text-blue-600 dark:text-blue-400">QuickPoll</span>
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
