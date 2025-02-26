@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { Poll, Option } from '@/types/database.types'
 import { useToast } from '@/components/ui/use-toast'
+import { NameDialog } from '@/components/ui/name-dialog'
 
 export default function PollPage({ params }: { params: { id: string } }) {
   console.log('Poll ID:', params.id);
@@ -17,6 +18,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [showNameDialog, setShowNameDialog] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -211,11 +213,10 @@ export default function PollPage({ params }: { params: { id: string } }) {
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
     const clientId = localStorage.getItem('anonymous_client_id')
+    const userName = localStorage.getItem('anonymous_user_name')
 
-    if (!userId && !clientId) {
-      // Generate client ID for new anonymous users
-      const newClientId = crypto.randomUUID()
-      localStorage.setItem('anonymous_client_id', newClientId)
+    if (!userId && (!clientId || !userName)) {
+      setShowNameDialog(true)
       return
     }
 
@@ -233,8 +234,24 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
+  const handleNameSubmit = (name: string) => {
+    const clientId = `${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`
+    localStorage.setItem('anonymous_client_id', clientId)
+    localStorage.setItem('anonymous_user_name', name)
+    setShowNameDialog(false)
+    checkUserVote()
+  }
+
   const submitVote = async (optionId: string): Promise<void> => {
     if (!supabase) return
+    
+    // Check if we have a name for anonymous users
+    const { data: { session } } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId && !localStorage.getItem('anonymous_user_name')) {
+      setShowNameDialog(true)
+      return
+    }
     
     try {
       // Check if poll has ended
@@ -354,6 +371,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
     <LoadingSpinner />
   ) : (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
+      {showNameDialog && <NameDialog onSubmit={handleNameSubmit} />}
       <div className="w-full max-w-2xl">
         <PollVoting
           poll={poll}
