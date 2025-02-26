@@ -1,3 +1,46 @@
+'use client';
+
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { ShareDialog } from '@/components/ui/share-dialog';
+import { Eye, EyeOff, Lock, Timer, Share2, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { format } from 'date-fns';
+import Confetti from 'react-confetti';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/use-toast';
+
+import type { Poll, Option } from '@/types/database.types';
+
+interface PollVotingProps {
+  poll: Poll | null;
+  pollId: string;
+  options: Option[];
+  votes: Record<string, number>;
+  totalVotes: number;
+  hasVoted: boolean;
+  selectedOption: string | null;
+  isAdmin: boolean;
+  submitVote: (optionId: string) => void;
+}
+
+export function PollVoting({ 
+  poll,
+  pollId,
+  options,
+  votes,
+  totalVotes,
+  hasVoted,
+  selectedOption,
+  isAdmin,
+  submitVote
+}: PollVotingProps) {
+  const [showQR, setShowQR] = useState(false);
+  const [showConfetti] = useState(false);
+  const { toast } = useToast();
 
   if (!poll) return <LoadingSpinner />;
 
@@ -28,8 +71,6 @@
     if (!poll?.end_date) return false;
     return new Date(poll.end_date) < new Date();
   };
-
-  if (!poll) return <LoadingSpinner />;
 
   return (
     <>

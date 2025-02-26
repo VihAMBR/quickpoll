@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Poll, PollOption, Vote } from '../types/database.types';
+import type { Poll, Option, Vote } from '../types/database.types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Share2, QrCode, Eye, EyeOff, Lock, Timer, Users, Trash2 } from "lucide-react";
@@ -27,7 +27,7 @@ interface PollAdminProps {
 
 export default function PollAdmin({ pollId }: PollAdminProps) {
   const [poll, setPoll] = useState<Poll | null>(null);
-  const [options, setOptions] = useState<PollOption[]>([]);
+  const [options, setOptions] = useState<Option[]>([]);
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [totalVotes, setTotalVotes] = useState(0);
   const [uniqueVoters, setUniqueVoters] = useState(0);
