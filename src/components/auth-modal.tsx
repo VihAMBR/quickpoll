@@ -20,6 +20,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (event === 'SIGNED_IN') {
         onClose()
         router.push('/dashboard')
+      } else if (event === 'SIGNED_OUT') {
+        onClose()
         router.refresh()
       }
     })
