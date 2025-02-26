@@ -148,7 +148,7 @@ export function PollVoting({
                 </p>
               </div>
               <Button 
-                onClick={() => router.push('/login')} 
+                onClick={() => router.push(`/login?returnTo=/poll/${pollId}`)} 
                 className="mt-4"
                 size="lg"
               >

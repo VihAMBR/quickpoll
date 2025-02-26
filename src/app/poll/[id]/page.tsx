@@ -224,7 +224,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       .from('votes')
       .select('option_id')
       .eq('poll_id', params.id)
-      .or(userId ? `user_id.eq.${userId}` : `client_id.eq.${clientId}`)
+      .eq(userId ? 'user_id' : 'client_id', userId || clientId)
       .maybeSingle()
 
     if (data) {
@@ -265,6 +265,13 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .eq(userId ? 'user_id' : 'client_id', userId || clientId)
         .maybeSingle()
 
+      console.log('Checking vote:', {
+        pollId: params.id,
+        userId,
+        clientId,
+        existingVote
+      })
+
       if (existingVote) {
         toast({
           title: "Error",
@@ -278,10 +285,12 @@ export default function PollPage({ params }: { params: { id: string } }) {
       const newVote = {
         poll_id: params.id,
         option_id: optionId,
-        user_id: userId,
+        user_id: userId || null,
         client_id: userId ? null : clientId,
         created_at: new Date().toISOString()
       }
+
+      console.log('Submitting vote:', newVote)
 
       // Submit to database
       const { error } = await supabase
@@ -290,7 +299,12 @@ export default function PollPage({ params }: { params: { id: string } }) {
 
       if (error) {
         console.error('Error submitting vote:', error)
-        throw error
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive"
+        })
+        return
       }
 
       // Update UI after successful submission

@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
+  // Get the returnTo URL from the request parameters
+  const returnTo = requestUrl.searchParams.get('returnTo') || '/'
+  const decodedReturnTo = decodeURIComponent(returnTo)
+  
   // URL to redirect to after sign in process completes
-  return NextResponse.redirect(new URL('/dashboard', request.url))
+  return NextResponse.redirect(new URL(decodedReturnTo, request.url))
 }
