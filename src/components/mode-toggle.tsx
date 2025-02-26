@@ -21,6 +21,7 @@ export function ModeToggle() {
   return (
     <Button
       variant="outline"
+      className="hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-600 dark:hover:border-blue-400"
       size="icon"
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
     >

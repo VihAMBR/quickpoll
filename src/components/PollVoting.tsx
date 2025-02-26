@@ -5,13 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ShareDialog } from '@/components/ui/share-dialog';
-import { Eye, EyeOff, Lock, Timer, Share2, QrCode } from 'lucide-react';
+import { Lock, Timer, Share2, QrCode } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import Confetti from 'react-confetti';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+
 
 import type { Poll, Option } from '@/types/database.types';
 
@@ -42,29 +43,37 @@ export function PollVoting({
   const [showConfetti] = useState(false);
   const { toast } = useToast();
 
-  if (!poll) return <LoadingSpinner />;
+  if (!poll) {
+    console.log('No poll data');
+    return <LoadingSpinner />;
+  }
 
-  const toggleShowResults = async () => {
-    if (!isAdmin) return;
-    
-    const { error } = await supabase
-      .from('polls')
-      .update({ show_results: !poll?.show_results })
-      .eq('id', pollId);
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update poll settings",
-        variant: "destructive"
-      });
-    }
-  };
+  if (!options || options.length === 0) {
+    console.log('No options available');
+    return (
+      <Card className="max-w-lg mx-auto">
+        <CardHeader>
+          <CardTitle>{poll.title}</CardTitle>
+          <CardDescription>No options available for this poll</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+  
+  console.log('PollVoting props:', {
+    poll,
+    pollId,
+    options,
+    votes,
+    totalVotes,
+    hasVoted,
+    selectedOption,
+    isAdmin
+  });
 
   const shouldShowResults = () => {
     if (!poll) return false;
-    if (isAdmin) return true;
-    return poll.show_results || hasVoted;
+    return isAdmin || hasVoted;
   };
 
   const isPollEnded = () => {
@@ -76,6 +85,7 @@ export function PollVoting({
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
       <Card className="max-w-lg mx-auto">
+
         <CardHeader className="space-y-4">
           <div className="flex justify-between items-start">
             <div>
@@ -92,20 +102,7 @@ export function PollVoting({
               )}
             </div>
             <div className="flex gap-2">
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="shrink-0 hover:bg-muted"
-                  onClick={toggleShowResults}
-                >
-                  {poll.show_results ? (
-                    <Eye className="h-4 w-4" />
-                  ) : (
-                    <EyeOff className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
+
               <Button
                 variant="outline"
                 size="icon"

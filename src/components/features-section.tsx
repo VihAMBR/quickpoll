@@ -28,9 +28,9 @@ export function FeaturesSection() {
         <div className="grid gap-8 md:grid-cols-3">
           {features.map((feature, index) => (
             <div key={index} className="group relative overflow-hidden rounded-lg border bg-background p-6 transition-shadow hover:shadow-lg">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-primary/5 opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-blue-600/5 dark:from-blue-400/10 dark:to-blue-400/5 opacity-0 transition-opacity group-hover:opacity-100" />
               <div className="relative">
-                <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-400">
                   <feature.icon className="h-6 w-6" />
                 </div>
                 <h3 className="mb-2 text-xl font-semibold">{feature.title}</h3>

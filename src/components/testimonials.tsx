@@ -24,15 +24,14 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <section className="flex flex-col items-center py-12 md:py-24 bg-secondary/50">
+    <section className="flex flex-col items-center py-12 md:py-24">
       <div className="max-w-[980px] mx-auto text-center">
         <h2 className="mb-12 text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
           What Our Users Say
         </h2>
         <div className="grid gap-8 md:grid-cols-3">
           {testimonials.map((testimonial, index) => (
-            <div key={index} className="group relative overflow-hidden rounded-xl bg-background p-6 shadow-sm transition-all hover:shadow-lg">
-              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+            <div key={index} className="group relative overflow-hidden rounded-xl bg-background/50 p-6 shadow-sm transition-all hover:shadow-lg hover:bg-background">
               <div className="relative">
                 <div className="mb-4 flex justify-center">
                   <div className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-primary/10">

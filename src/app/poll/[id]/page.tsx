@@ -8,6 +8,7 @@ import type { Poll, Option } from '@/types/database.types'
 import { useToast } from '@/components/ui/use-toast'
 
 export default function PollPage({ params }: { params: { id: string } }) {
+  console.log('Poll ID:', params.id);
   const [poll, setPoll] = useState<Poll | null>(null)
   const [options, setOptions] = useState<Option[]>([])
   const [votes, setVotes] = useState<Record<string, number>>({})
@@ -19,15 +20,88 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const { toast } = useToast()
 
   useEffect(() => {
-    fetchPollData()
-    checkUserVote()
-    setupRealtimeSubscription()
-  }, [])
+    if (!supabase) {
+      console.error('No Supabase client available')
+      return
+    }
+
+    const loadData = async () => {
+      await fetchPollData()
+      await checkUserVote()
+    }
+
+    loadData()
+
+    // Setup realtime subscription
+    const channelId = `poll_votes_${params.id}`
+    console.log('Setting up realtime subscription:', channelId)
+
+    const channel = supabase.channel(channelId)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'votes',
+          filter: `poll_id=eq.${params.id}`
+        },
+        (payload) => {
+          console.log('Vote change:', payload)
+          
+          // Re-fetch all votes to ensure consistency
+          const fetchVotes = async () => {
+            if (!supabase) return
+
+            const { data: votesData, error: votesError } = await supabase
+              .from('votes')
+              .select('option_id')
+              .eq('poll_id', params.id)
+
+            if (votesError) {
+              console.error('Error fetching votes:', votesError)
+              return
+            }
+
+            // Count votes per option
+            const voteCounts: Record<string, number> = {}
+            votesData?.forEach(vote => {
+              voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
+            })
+            
+            console.log('Updated vote counts:', voteCounts)
+            setVotes(voteCounts)
+            setTotalVotes(votesData?.length || 0)
+          }
+
+          fetchVotes()
+        }
+      )
+
+    channel.subscribe((status) => {
+      console.log('Subscription status:', status)
+    })
+
+    return () => {
+      console.log('Cleaning up realtime subscription:', channelId)
+      channel.unsubscribe()
+    }
+  }, [params.id])
 
   const fetchPollData = async () => {
-    if (!supabase) return
+    if (!supabase) {
+      console.error('Supabase client not available')
+      return
+    }
     
     try {
+      // First, check if Supabase is initialized
+      const { data: authData, error: authError } = await supabase.auth.getSession()
+      if (authError) {
+        console.error('Auth error:', authError)
+        return
+      }
+      console.log('Auth data:', authData)
+
       // Fetch poll
       const { data: pollData, error: pollError } = await supabase
         .from('polls')
@@ -35,22 +109,33 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .eq('id', params.id)
         .single()
 
-      if (pollError) throw pollError
+      if (pollError) {
+        console.error('Error fetching poll:', pollError)
+        throw pollError
+      }
+      
+      console.log('Poll data:', pollData)
       setPoll(pollData)
 
       // Check if user is admin
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsAdmin(session?.user?.id === pollData.user_id)
+      setIsAdmin(authData.session?.user?.id === pollData.created_by)
 
       // Fetch options
       const { data: optionsData, error: optionsError } = await supabase
-        .from('options')
-        .select('*')
+        .from('poll_options')
+        .select('id, poll_id, text')
         .eq('poll_id', params.id)
-        .order('order')
 
-      if (optionsError) throw optionsError
-      setOptions(optionsData)
+      if (optionsError) {
+        console.error('Error fetching options:', optionsError)
+        throw optionsError
+      }
+      
+      console.log('Options data:', optionsData)
+      if (!optionsData || optionsData.length === 0) {
+        console.warn('No options found for poll:', params.id)
+      }
+      setOptions(optionsData || [])
 
       // Fetch votes
       const { data: votesData, error: votesError } = await supabase
@@ -58,15 +143,20 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .select('option_id')
         .eq('poll_id', params.id)
 
-      if (votesError) throw votesError
+      if (votesError) {
+        console.error('Error fetching votes:', votesError)
+        throw votesError
+      }
 
       // Count votes per option
       const voteCounts: Record<string, number> = {}
-      votesData.forEach(vote => {
+      votesData?.forEach(vote => {
         voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
       })
+      
+      console.log('Vote counts:', voteCounts)
       setVotes(voteCounts)
-      setTotalVotes(votesData.length)
+      setTotalVotes(votesData?.length || 0)
     } catch (error) {
       console.error('Error fetching poll data:', error)
       toast({
@@ -98,26 +188,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
-  const setupRealtimeSubscription = () => {
-    if (!supabase) return
-    
-    const votesSubscription = supabase
-      .channel('votes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'votes',
-        filter: `poll_id=eq.${params.id}`
-      }, () => {
-        fetchPollData()
-      })
-      .subscribe()
-
-    return () => {
-      supabase?.removeChannel(votesSubscription)
-    }
-  }
-
   const submitVote = async (optionId: string) => {
     if (!supabase) return
     
@@ -140,7 +210,10 @@ export default function PollPage({ params }: { params: { id: string } }) {
           user_id: session.user.id
         })
 
-      if (error) throw error
+      if (error) {
+        console.error('Error submitting vote:', error)
+        throw error
+      }
 
       setHasVoted(true)
       setSelectedOption(optionId)
@@ -158,19 +231,23 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
-  if (loading) return <LoadingSpinner />
-
-  return (
-    <PollVoting
-      poll={poll}
-      pollId={params.id}
-      options={options}
-      votes={votes}
-      totalVotes={totalVotes}
-      hasVoted={hasVoted}
-      selectedOption={selectedOption}
-      isAdmin={isAdmin}
-      submitVote={submitVote}
-    />
+  return loading ? (
+    <LoadingSpinner />
+  ) : (
+    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        <PollVoting
+          poll={poll}
+          pollId={params.id}
+          options={options}
+          votes={votes}
+          totalVotes={totalVotes}
+          hasVoted={hasVoted}
+          selectedOption={selectedOption}
+          isAdmin={isAdmin}
+          submitVote={submitVote}
+        />
+      </div>
+    </div>
   )
 }

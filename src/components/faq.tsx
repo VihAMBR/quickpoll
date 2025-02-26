@@ -25,7 +25,7 @@ const faqs = [
 
 export function FAQ() {
   return (
-    <section className="w-full py-12 md:py-24 bg-secondary/50">
+    <section className="w-full py-12 md:py-24">
       <div className="container">
         <h2 className="mb-12 text-center text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
           Frequently Asked Questions

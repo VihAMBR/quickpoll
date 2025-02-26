@@ -10,13 +10,15 @@ export default function SignIn() {
   const router = useRouter()
 
   useEffect(() => {
+    if (!supabase) return
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         router.push("/create")
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => subscription?.unsubscribe()
   }, [router])
 
   return (
@@ -28,7 +30,7 @@ export default function SignIn() {
           </h2>
         </div>
         <Auth
-          supabaseClient={supabase}
+          supabaseClient={supabase!}
           appearance={{
             theme: ThemeSupa,
             variables: {

@@ -31,12 +31,24 @@ export default function CreatePoll() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!supabase) {
+        console.error('Supabase client not available');
         router.push('/');
         return;
       }
-      setUserId(user.id);
+
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        if (!user) {
+          router.push('/');
+          return;
+        }
+        setUserId(user.id);
+      } catch (error) {
+        console.error('Error checking user:', error);
+        router.push('/');
+      }
     };
     checkUser();
   }, [router]);
@@ -75,6 +87,8 @@ export default function CreatePoll() {
         created_by: userId,
         created_at: new Date().toISOString()
       };
+
+      if (!supabase) throw new Error('Supabase client not available');
 
       const { data: poll, error: pollError } = await supabase
         .from('polls')

@@ -41,47 +41,81 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
   }, [pollId]);
 
   const fetchPollData = async () => {
-    // Fetch poll details
-    const { data: pollData } = await supabase
-      .from('polls')
-      .select('*')
-      .eq('id', pollId)
-      .single();
+    if (!supabase) {
+      console.error('Supabase client not available');
+      return;
+    }
 
-    if (pollData) setPoll(pollData);
+    try {
+      // Fetch poll details
+      const { data: pollData, error: pollError } = await supabase
+        .from('polls')
+        .select('*')
+        .eq('id', pollId)
+        .single();
 
-    // Fetch poll options
-    const { data: optionsData } = await supabase
-      .from('poll_options')
-      .select('*')
-      .eq('poll_id', pollId);
+      if (pollError) {
+        console.error('Error fetching poll:', pollError);
+        return;
+      }
 
-    if (optionsData) {
-      setOptions(optionsData);
-      
-      // Fetch current votes
-      const { data: votesData } = await supabase
-        .from('votes')
-        .select('option_id, user_id')
+      if (pollData) setPoll(pollData);
+
+      // Fetch poll options
+      const { data: optionsData, error: optionsError } = await supabase
+        .from('poll_options')
+        .select('*')
         .eq('poll_id', pollId);
 
-      if (votesData) {
-        const voteCounts: Record<string, number> = {};
-        const uniqueUsers = new Set();
-        
-        votesData.forEach((vote: Vote) => {
-          voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1;
-          if (vote.user_id) uniqueUsers.add(vote.user_id);
-        });
-        
-        setVotes(voteCounts);
-        setTotalVotes(votesData.length);
-        setUniqueVoters(uniqueUsers.size);
+      if (optionsError) {
+        console.error('Error fetching options:', optionsError);
+        return;
       }
+
+      if (optionsData) {
+        setOptions(optionsData);
+        
+        // Fetch current votes
+        const { data: votesData, error: votesError } = await supabase
+          .from('votes')
+          .select('option_id, user_id')
+          .eq('poll_id', pollId);
+
+        if (votesError) {
+          console.error('Error fetching votes:', votesError);
+          return;
+        }
+
+        if (votesData) {
+          const voteCounts: Record<string, number> = {};
+          const uniqueUsers = new Set();
+          
+          votesData.forEach((vote: Vote) => {
+            voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1;
+            if (vote.user_id) uniqueUsers.add(vote.user_id);
+          });
+          
+          setVotes(voteCounts);
+          setTotalVotes(votesData.length);
+          setUniqueVoters(uniqueUsers.size);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching poll data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load poll data",
+        variant: "destructive"
+      });
     }
   };
 
   const subscribeToVotes = () => {
+    if (!supabase) {
+      console.error('Supabase client not available');
+      return;
+    }
+
     const subscription = supabase
       .channel(`poll_${pollId}`)
       .on('postgres_changes', {
@@ -93,17 +127,30 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   };
 
   const toggleShowResults = async () => {
-    const { error } = await supabase
-      .from('polls')
-      .update({ show_results: !poll?.show_results })
-      .eq('id', pollId);
+    if (!supabase) {
+      console.error('Supabase client not available');
+      return;
+    }
 
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from('polls')
+        .update({ show_results: !poll?.show_results })
+        .eq('id', pollId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Poll settings updated"
+      });
+    } catch (error) {
+      console.error('Error updating poll settings:', error);
       toast({
         title: "Error",
         description: "Failed to update poll settings",
@@ -113,6 +160,11 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
   };
 
   const deletePoll = async () => {
+    if (!supabase) {
+      console.error('Supabase client not available');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('polls')
@@ -129,6 +181,7 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
       // Redirect to home
       window.location.href = '/';
     } catch (error) {
+      console.error('Error deleting poll:', error);
       toast({
         title: "Error",
         description: "Failed to delete poll",

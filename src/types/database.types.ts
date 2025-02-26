@@ -6,7 +6,7 @@ export interface Database {
         Insert: Omit<Poll, 'id' | 'created_at'>
         Update: Partial<Poll>
       }
-      options: {
+      poll_options: {
         Row: Option
         Insert: Omit<Option, 'id'>
         Update: Partial<Option>
@@ -24,7 +24,7 @@ export interface Poll {
   id: string
   title: string
   description?: string
-  user_id: string
+  created_by: string
   created_at: string
   end_date?: string
   require_auth: boolean
@@ -35,7 +35,6 @@ export interface Option {
   id: string
   poll_id: string
   text: string
-  order: number
 }
 
 export interface Vote {

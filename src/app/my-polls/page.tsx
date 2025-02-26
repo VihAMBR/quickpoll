@@ -20,11 +20,15 @@ export default function MyPolls() {
   }, [])
 
   const fetchPolls = async () => {
+    if (!supabase) {
+      router.push('/')
+      return
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/')
-        return
         return
       }
 
@@ -43,6 +47,8 @@ export default function MyPolls() {
   }
 
   const toggleResults = async (pollId: string, currentValue: boolean) => {
+    if (!supabase) return
+
     await supabase
       .from('polls')
       .update({ show_results: !currentValue })
@@ -54,6 +60,8 @@ export default function MyPolls() {
   }
 
   const deletePoll = async (pollId: string) => {
+    if (!supabase) return
+
     await supabase
       .from('polls')
       .delete()

@@ -16,6 +16,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const router = useRouter()
 
   useEffect(() => {
+    if (!supabase) return
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN') {
         onClose()
@@ -27,7 +29,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     })
 
     return () => {
-      subscription.unsubscribe()
+      subscription?.unsubscribe()
     }
   }, [router, onClose])
 
@@ -35,7 +37,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
         <Auth
-          supabaseClient={supabase}
+          supabaseClient={supabase!}
           appearance={{
             theme: ThemeSupa,
             variables: {
@@ -53,7 +55,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             }
           }}
           providers={['google']}
-          redirectTo={`${window.location.origin}/auth/callback`}
+          redirectTo={typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : ''}
           magicLink={false}
           socialLayout="horizontal"
           localization={{

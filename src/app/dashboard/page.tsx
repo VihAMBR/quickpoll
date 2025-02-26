@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { PlusCircle, BarChart3, Vote, Users, Clock } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Navigation } from '@/components/navigation'
 
 interface DashboardStats {
   totalPolls: number
@@ -52,13 +53,17 @@ export default function DashboardPage() {
       const { data: votes } = await supabase
         .from('votes')
         .select('poll_id')
-        .eq('poll_id', polls?.map(p => p.id) || [])
+        .in('poll_id', polls?.map(p => p.id) || [])
 
       const now = new Date()
       const stats: DashboardStats = {
         totalPolls: polls?.length || 0,
         totalVotes: votes?.length || 0,
-        activePolls: polls?.filter(p => new Date(p.end_date) > now)?.length || 0,
+        activePolls: polls?.filter(p => {
+          const startDate = new Date(p.start_date)
+          const endDate = new Date(p.end_date)
+          return startDate <= now && endDate > now
+        })?.length || 0,
         completedPolls: polls?.filter(p => new Date(p.end_date) <= now)?.length || 0
       }
 
@@ -78,29 +83,34 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-12 space-y-8">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
+      <main>
+        <Navigation />
+        <div className="container mx-auto pt-24 pb-12 space-y-8">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-32" />
+            ))}
+          </div>
+          <Skeleton className="h-64" />
         </div>
-        <Skeleton className="h-64" />
-      </div>
+      </main>
     )
   }
 
   return (
-    <div className="container mx-auto py-12 space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-4xl font-bold">Dashboard</h1>
-        <Button asChild>
-          <Link href="/create">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Create New Poll
-          </Link>
-        </Button>
-      </div>
+    <main>
+      <Navigation hideAuth />
+      <div className="container mx-auto pt-32 pb-16 space-y-12">
+        <div className="flex justify-between items-center">
+          <h1 className="text-4xl font-bold">Dashboard</h1>
+          <Button asChild>
+            <Link href="/create">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create New Poll
+            </Link>
+          </Button>
+        </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -187,6 +197,7 @@ export default function DashboardPage() {
           </Button>
         </CardFooter>
       </Card>
-    </div>
+      </div>
+    </main>
   )
 }
