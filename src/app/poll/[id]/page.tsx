@@ -32,11 +32,12 @@ export default function PollPage({ params }: { params: { id: string } }) {
 
     loadData()
 
-    // Setup realtime subscription
-    const channelId = `poll_votes_${params.id}`
-    console.log('Setting up realtime subscription:', channelId)
+    // Setup realtime subscriptions with broadcast
+    const channelId = `poll_${params.id}`
+    console.log('Setting up realtime subscriptions:', channelId)
 
     const channel = supabase.channel(channelId)
+      // Subscribe to vote changes
       .on(
         'postgres_changes',
         {
@@ -46,39 +47,58 @@ export default function PollPage({ params }: { params: { id: string } }) {
           filter: `poll_id=eq.${params.id}`
         },
         (payload) => {
-          console.log('Vote change:', payload)
-          
-          // Re-fetch all votes to ensure consistency
-          const fetchVotes = async () => {
-            if (!supabase) return
-
-            const { data: votesData, error: votesError } = await supabase
-              .from('votes')
-              .select('option_id')
-              .eq('poll_id', params.id)
-
-            if (votesError) {
-              console.error('Error fetching votes:', votesError)
-              return
-            }
-
-            // Count votes per option
-            const voteCounts: Record<string, number> = {}
-            votesData?.forEach(vote => {
-              voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
-            })
-            
-            console.log('Updated vote counts:', voteCounts)
-            setVotes(voteCounts)
-            setTotalVotes(votesData?.length || 0)
+          console.log('Vote change detected:', payload)
+          if (payload.eventType === 'INSERT') {
+            // Handle new vote
+            const newVote = payload.new as { option_id: string }
+            setVotes(prev => ({
+              ...prev,
+              [newVote.option_id]: (prev[newVote.option_id] || 0) + 1
+            }))
+            setTotalVotes(prev => prev + 1)
+          } else if (payload.eventType === 'DELETE') {
+            // Handle vote removal
+            const oldVote = payload.old as { option_id: string }
+            setVotes(prev => ({
+              ...prev,
+              [oldVote.option_id]: Math.max(0, (prev[oldVote.option_id] || 0) - 1)
+            }))
+            setTotalVotes(prev => Math.max(0, prev - 1))
           }
-
-          fetchVotes()
+          // Check if the current user's vote status has changed
+          checkUserVote()
+        }
+      )
+      // Subscribe to poll changes
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'polls',
+          filter: `id=eq.${params.id}`
+        },
+        (payload) => {
+          console.log('Poll change detected:', payload)
+          if (payload.eventType === 'UPDATE') {
+            // Update poll data
+            setPoll(payload.new as Poll)
+          } else {
+            // For other changes, refresh all data
+            fetchPollData()
+          }
         }
       )
 
-    channel.subscribe((status) => {
+    // Subscribe to presence for active users (optional)
+    channel.subscribe(async (status) => {
       console.log('Subscription status:', status)
+      if (status === 'SUBSCRIBED') {
+        console.log('Successfully subscribed to real-time updates')
+        // Initial data fetch after successful subscription
+        await fetchPollData()
+        await checkUserVote()
+      }
     })
 
     return () => {
@@ -192,6 +212,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
     if (!supabase) return
     
     try {
+      // Check user session
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user?.id) {
         toast({
@@ -202,21 +223,67 @@ export default function PollPage({ params }: { params: { id: string } }) {
         return
       }
 
+      // Check if poll has ended
+      if (poll?.end_date && new Date(poll.end_date) < new Date()) {
+        toast({
+          title: "Error",
+          description: "This poll has ended",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Check if user has already voted
+      const { data: existingVote } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('poll_id', params.id)
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+
+      if (existingVote) {
+        toast({
+          title: "Error",
+          description: "You have already voted in this poll",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Submit vote with optimistic update
+      const newVote = {
+        poll_id: params.id,
+        option_id: optionId,
+        user_id: session.user.id,
+        created_at: new Date().toISOString()
+      }
+
+      // Optimistically update UI
+      setHasVoted(true)
+      setSelectedOption(optionId)
+      setVotes(prev => ({
+        ...prev,
+        [optionId]: (prev[optionId] || 0) + 1
+      }))
+      setTotalVotes(prev => prev + 1)
+
+      // Submit to database
       const { error } = await supabase
         .from('votes')
-        .insert({
-          poll_id: params.id,
-          option_id: optionId,
-          user_id: session.user.id
-        })
+        .insert(newVote)
 
       if (error) {
-        console.error('Error submitting vote:', error)
+        // Revert optimistic updates on error
+        setHasVoted(false)
+        setSelectedOption(null)
+        setVotes(prev => ({
+          ...prev,
+          [optionId]: Math.max(0, (prev[optionId] || 0) - 1)
+        }))
+        setTotalVotes(prev => Math.max(0, prev - 1))
         throw error
       }
 
-      setHasVoted(true)
-      setSelectedOption(optionId)
       toast({
         title: "Success",
         description: "Your vote has been recorded"
@@ -225,7 +292,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       console.error('Error submitting vote:', error)
       toast({
         title: "Error",
-        description: "Failed to submit vote",
+        description: "Failed to submit vote. Please try again.",
         variant: "destructive"
       })
     }

@@ -51,7 +51,7 @@ export function PollVoting({
   if (!options || options.length === 0) {
     console.log('No options available');
     return (
-      <Card className="max-w-lg mx-auto">
+      <Card className="w-full max-w-lg mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>{poll.title}</CardTitle>
           <CardDescription>No options available for this poll</CardDescription>
@@ -84,10 +84,10 @@ export function PollVoting({
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
-      <Card className="max-w-lg mx-auto">
+      <Card className="w-full max-w-lg mx-auto shadow-lg">
 
         <CardHeader className="space-y-4">
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 {poll.title}
@@ -101,12 +101,12 @@ export function PollVoting({
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 self-end sm:self-auto">
 
               <Button
                 variant="outline"
                 size="icon"
-                className="shrink-0 hover:bg-muted"
+                className="shrink-0 hover:bg-muted w-10 h-10 sm:w-8 sm:h-8"
                 onClick={() => setShowQR(!showQR)}
               >
                 <QrCode className="h-4 w-4" />
@@ -115,7 +115,7 @@ export function PollVoting({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="shrink-0 hover:bg-muted"
+                  className="shrink-0 hover:bg-muted w-10 h-10 sm:w-8 sm:h-8"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -123,7 +123,7 @@ export function PollVoting({
             </div>
           </div>
           {showQR && (
-            <div className="flex justify-center p-4 bg-white rounded-lg">
+            <div className="flex justify-center p-4 bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
               <QRCodeSVG
                 value={typeof window !== 'undefined' ? window.location.href : ''}
                 size={200}
@@ -145,11 +145,11 @@ export function PollVoting({
                     onClick={() => !isDisabled && submitVote(option.id)}
                     disabled={isDisabled}
                     variant={selectedOption === option.id ? "secondary" : "outline"}
-                    className={`w-full justify-between h-auto py-3 px-4 ${isDisabled ? 'opacity-80' : 'hover:bg-muted'}`}
+                    className={`w-full justify-between h-auto py-3 px-4 text-left ${isDisabled ? 'opacity-80' : 'hover:bg-muted'}`}
                   >
-                    <span className="font-normal">{option.text}</span>
+                    <span className="font-normal break-words">{option.text}</span>
                     {shouldShowResults() && (
-                      <span className="font-medium ml-2 text-muted-foreground">{voteCount} votes</span>
+                      <span className="font-medium ml-2 text-muted-foreground whitespace-nowrap">{voteCount} votes</span>
                     )}
                   </Button>
                   {shouldShowResults() && (
