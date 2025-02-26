@@ -192,37 +192,36 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const checkUserVote = async () => {
     if (!supabase) return
     
+    // Check for authenticated user vote
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user?.id) return
+    if (session?.user?.id) {
+      const { data } = await supabase
+        .from('votes')
+        .select('option_id')
+        .eq('poll_id', params.id)
+        .eq('user_id', session.user.id)
+        .single()
 
-    const { data } = await supabase
-      .from('votes')
-      .select('option_id')
-      .eq('poll_id', params.id)
-      .eq('user_id', session.user.id)
-      .single()
+      if (data) {
+        setHasVoted(true)
+        setSelectedOption(data.option_id)
+        return
+      }
+    }
 
-    if (data) {
+    // Check for anonymous vote in local storage
+    const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
+    const hasVotedAnonymously = localVotes[params.id]
+    if (hasVotedAnonymously) {
       setHasVoted(true)
-      setSelectedOption(data.option_id)
+      setSelectedOption(hasVotedAnonymously.option_id)
     }
   }
 
-  const submitVote = async (optionId: string) => {
+  const submitVote = async (optionId: string): Promise<void> => {
     if (!supabase) return
     
     try {
-      // Check user session
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user?.id) {
-        toast({
-          title: "Error",
-          description: "You must be signed in to vote",
-          variant: "destructive"
-        })
-        return
-      }
-
       // Check if poll has ended
       if (poll?.end_date && new Date(poll.end_date) < new Date()) {
         toast({
@@ -233,29 +232,47 @@ export default function PollPage({ params }: { params: { id: string } }) {
         return
       }
 
-      // Check if user has already voted
-      const { data: existingVote } = await supabase
-        .from('votes')
-        .select('id')
-        .eq('poll_id', params.id)
-        .eq('user_id', session.user.id)
-        .maybeSingle()
+      // Get user session
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user?.id
 
-      if (existingVote) {
-        toast({
-          title: "Error",
-          description: "You have already voted in this poll",
-          variant: "destructive"
-        })
-        return
+      // Check for existing vote
+      if (userId) {
+        const { data: existingVote } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('poll_id', params.id)
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        if (existingVote) {
+          toast({
+            title: "Error",
+            description: "You have already voted in this poll",
+            variant: "destructive"
+          })
+          return
+        }
+      } else {
+        // Check for anonymous vote in local storage
+        const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
+        if (localVotes[params.id]) {
+          toast({
+            title: "Error",
+            description: "You have already voted in this poll",
+            variant: "destructive"
+          })
+          return
+        }
       }
 
-      // Submit vote with optimistic update
+      // Create vote object
       const newVote = {
         poll_id: params.id,
         option_id: optionId,
-        user_id: session.user.id,
-        created_at: new Date().toISOString()
+        user_id: userId || null,
+        created_at: new Date().toISOString(),
+        anonymous: !userId
       }
 
       // Optimistically update UI
@@ -282,6 +299,16 @@ export default function PollPage({ params }: { params: { id: string } }) {
         }))
         setTotalVotes(prev => Math.max(0, prev - 1))
         throw error
+      }
+
+      // Store anonymous vote in local storage
+      if (!userId) {
+        const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
+        localVotes[params.id] = {
+          option_id: optionId,
+          created_at: newVote.created_at
+        }
+        localStorage.setItem('anonymous_votes', JSON.stringify(localVotes))
       }
 
       toast({

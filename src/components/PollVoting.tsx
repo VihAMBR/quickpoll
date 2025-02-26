@@ -25,7 +25,7 @@ interface PollVotingProps {
   hasVoted: boolean;
   selectedOption: string | null;
   isAdmin: boolean;
-  submitVote: (optionId: string) => void;
+  submitVote: (optionId: string) => Promise<void>;
 }
 
 export function PollVoting({ 
@@ -41,6 +41,8 @@ export function PollVoting({
 }: PollVotingProps) {
   const [showQR, setShowQR] = useState(false);
   const [showConfetti] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   if (!poll) {
@@ -142,9 +144,9 @@ export function PollVoting({
               return (
                 <div key={option.id} className="space-y-3">
                   <Button
-                    onClick={() => !isDisabled && submitVote(option.id)}
+                    onClick={() => !isDisabled && setSelectedChoice(option.id)}
                     disabled={isDisabled}
-                    variant={selectedOption === option.id ? "secondary" : "outline"}
+                    variant={selectedChoice === option.id || selectedOption === option.id ? "secondary" : "outline"}
                     className={`w-full justify-between h-auto py-3 px-4 text-left ${isDisabled ? 'opacity-80' : 'hover:bg-muted'}`}
                   >
                     <span className="font-normal break-words">{option.text}</span>
@@ -165,6 +167,37 @@ export function PollVoting({
             })}
           </div>
           
+          {!hasVoted && !isPollEnded() && (
+            <div className="flex justify-end mt-6">
+              <Button
+                onClick={async () => {
+                  if (selectedChoice) {
+                    setIsSubmitting(true);
+                    try {
+                      await submitVote(selectedChoice);
+                      setSelectedChoice(null);
+                    } catch (error) {
+                      console.error('Error submitting vote:', error);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }
+                }}
+                disabled={!selectedChoice || isSubmitting || hasVoted || isPollEnded()}
+                className="w-full sm:w-auto"
+              >
+                {isSubmitting ? (
+                  <>
+                    <LoadingSpinner className="mr-2 h-4 w-4 animate-spin" showText={false} />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Vote'
+                )}
+              </Button>
+            </div>
+          )}
+
           {shouldShowResults() && (
             <div className="text-center text-sm text-muted-foreground pt-4 border-t border-border">
               Total votes: {totalVotes}
