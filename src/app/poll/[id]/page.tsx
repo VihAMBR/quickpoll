@@ -262,7 +262,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .from('votes')
         .select('id')
         .eq('poll_id', params.id)
-        .or(userId ? `user_id.eq.${userId}` : `client_id.eq.${clientId}`)
+        .eq(userId ? 'user_id' : 'client_id', userId || clientId)
         .maybeSingle()
 
       if (existingVote) {

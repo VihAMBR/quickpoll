@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -43,7 +44,9 @@ export function PollVoting({
   const [showConfetti] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   if (!poll) {
     console.log('No poll data');
@@ -53,7 +56,7 @@ export function PollVoting({
   if (!options || options.length === 0) {
     console.log('No options available');
     return (
-      <Card className="w-full max-w-lg mx-auto shadow-lg">
+      <Card className="w-full max-w-lg mx-auto shadow-lg overflow-hidden relative">
         <CardHeader>
           <CardTitle>{poll.title}</CardTitle>
           <CardDescription>No options available for this poll</CardDescription>
@@ -86,10 +89,10 @@ export function PollVoting({
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
-      <Card className="w-full max-w-lg mx-auto shadow-lg">
+      <Card className="w-full max-w-lg mx-auto shadow-lg overflow-hidden relative">
 
         <CardHeader className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 {poll.title}
@@ -103,12 +106,12 @@ export function PollVoting({
                 </p>
               )}
             </div>
-            <div className="flex gap-2 self-end sm:self-auto">
+            <div className="flex gap-2 self-start sm:self-auto">
 
               <Button
                 variant="outline"
                 size="icon"
-                className="shrink-0 hover:bg-blue-600/10 w-10 h-10 sm:w-8 sm:h-8"
+                className="shrink-0 hover:bg-blue-600/10 w-8 h-8"
                 onClick={() => setShowQR(!showQR)}
               >
                 <QrCode className="h-4 w-4" />
@@ -117,7 +120,7 @@ export function PollVoting({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="shrink-0 hover:bg-blue-600/10 w-10 h-10 sm:w-8 sm:h-8"
+                  className="shrink-0 hover:bg-blue-600/10 w-8 h-8"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -134,8 +137,26 @@ export function PollVoting({
             </div>
           )}
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
+        <CardContent className="space-y-6 pb-6 sm:pb-0">
+          {poll.require_auth && !isAuthenticated ? (
+            <div className="text-center py-8 space-y-4">
+              <div className="flex flex-col items-center gap-2">
+                <Lock className="h-12 w-12 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Authentication Required</h3>
+                <p className="text-muted-foreground max-w-sm">
+                  This poll requires you to sign in before voting.
+                </p>
+              </div>
+              <Button 
+                onClick={() => router.push('/login')} 
+                className="mt-4"
+                size="lg"
+              >
+                Sign In to Vote
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
             {options.map((option) => {
               const voteCount = votes[option.id] || 0;
               const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
@@ -147,11 +168,11 @@ export function PollVoting({
                     onClick={() => !isDisabled && setSelectedChoice(option.id)}
                     disabled={isDisabled}
                     variant={selectedChoice === option.id || selectedOption === option.id ? "secondary" : "outline"}
-                    className={`w-full justify-between h-auto py-3 px-4 text-left ${isDisabled ? 'opacity-80' : 'hover:bg-blue-600/10'}`}
+                    className={`w-full justify-between h-auto py-3 px-4 text-left break-words ${isDisabled ? 'opacity-80' : 'hover:bg-blue-600/10'}`}
                   >
-                    <span className="font-normal break-words">{option.text}</span>
+                    <span className="font-normal break-words flex-1 mr-2">{option.text}</span>
                     {shouldShowResults() && (
-                      <span className="font-medium ml-2 text-muted-foreground whitespace-nowrap">{voteCount} votes</span>
+                      <span className="font-medium text-muted-foreground whitespace-nowrap text-sm">{voteCount} votes</span>
                     )}
                   </Button>
                   {shouldShowResults() && (
@@ -166,11 +187,14 @@ export function PollVoting({
               );
             })}
           </div>
+          )}
           
           {!hasVoted && !isPollEnded() && (
-            <div className="flex justify-end mt-6">
+            <div className="sticky bottom-0 left-0 right-0 p-4 bg-background border-t mt-6 -mx-6 -mb-6 sm:bg-transparent sm:border-0 sm:p-0 sm:m-0 sm:static">
               <Button
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (selectedChoice) {
                     setIsSubmitting(true);
                     try {
@@ -184,7 +208,7 @@ export function PollVoting({
                   }
                 }}
                 disabled={!selectedChoice || isSubmitting || hasVoted || isPollEnded()}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto shadow-sm active:scale-95 transition-transform"
               >
                 {isSubmitting ? (
                   <>
