@@ -1,12 +1,45 @@
-import { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useRouter } from 'next/router';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus, Loader2, Calendar } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
+import { format } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 
 export default function CreatePoll() {
   const router = useRouter();
+  const { toast } = useToast();
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requireAuth, setRequireAuth] = useState(false);
+  const [showResults, setShowResults] = useState(true);
+  const [date, setDate] = useState<Date>();
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/');
+        return;
+      }
+      setUserId(user.id);
+    };
+    checkUser();
+  }, [router]);
 
   const addOption = () => {
     setOptions([...options, '']);
@@ -23,95 +56,184 @@ export default function CreatePoll() {
     setIsSubmitting(true);
 
     try {
-      // Get the current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) throw new Error('Not authenticated');
+      if (!userId) {
+        toast({
+          title: 'Error',
+          description: 'You must be signed in to create a poll',
+          variant: 'destructive'
+        });
+        return;
+      }
 
       // Create the poll
+      const pollData = { 
+        title, 
+        description,
+        require_auth: requireAuth,
+        show_results: showResults,
+        end_date: date,
+        created_by: userId,
+        created_at: new Date().toISOString()
+      };
+
       const { data: poll, error: pollError } = await supabase
         .from('polls')
-        .insert([
-          { title, created_by: user.id, is_active: true }
-        ])
+        .insert(pollData)
         .select()
         .single();
 
       if (pollError) throw pollError;
 
       // Create the options
-      const optionsToInsert = options
-        .filter(opt => opt.trim() !== '')
-        .map(text => ({
+      const optionsData = options
+        .filter(option => option.trim())
+        .map(option => ({
           poll_id: poll.id,
-          text
+          text: option,
         }));
 
       const { error: optionsError } = await supabase
         .from('poll_options')
-        .insert(optionsToInsert);
+        .insert(optionsData);
 
       if (optionsError) throw optionsError;
 
-      // Redirect to the new poll
+      toast({
+        title: 'Success!',
+        description: 'Your poll has been created.',
+      });
+
       router.push(`/poll/${poll.id}`);
     } catch (error) {
       console.error('Error creating poll:', error);
-      alert('Failed to create poll');
+      toast({
+        title: 'Error',
+        description: 'Failed to create poll. Please try again.',
+        variant: 'destructive'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-lg mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-6">Create a New Poll</h2>
-      <form onSubmit={createPoll} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Poll Question
-            <input
-              type="text"
+    <Card>
+      <form onSubmit={createPoll}>
+        <CardHeader>
+          <CardTitle>Create a New Poll</CardTitle>
+          <CardDescription>
+            Create a poll and share it with others to collect votes.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Question</Label>
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
               placeholder="What's your favorite programming language?"
             />
-          </label>
-        </div>
+          </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">Options</label>
-          {options.map((option, index) => (
-            <input
-              key={index}
-              type="text"
-              value={option}
-              onChange={(e) => updateOption(index, e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-              placeholder={`Option ${index + 1}`}
+          <div className="space-y-2">
+            <Label>Description (Optional)</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add more context about your poll"
+              className="resize-none"
             />
-          ))}
-        </div>
+          </div>
 
-        <button
-          type="button"
-          onClick={addOption}
-          className="text-blue-600 hover:text-blue-800"
-        >
-          + Add Option
-        </button>
+          <div className="flex items-center justify-between space-x-2">
+            <Label>Require Authentication</Label>
+            <Switch
+              checked={requireAuth}
+              onCheckedChange={setRequireAuth}
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {isSubmitting ? 'Creating...' : 'Create Poll'}
-        </button>
+          <div className="flex items-center justify-between space-x-2">
+            <Label>Show Results Before Voting</Label>
+            <Switch
+              checked={showResults}
+              onCheckedChange={setShowResults}
+            />
+          </div>
+
+          <div className="flex flex-col space-y-2">
+            <Label>End Date (Optional)</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "justify-start text-left font-normal",
+                    !date && "text-muted-foreground"
+                  )}
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {date ? format(date, "PPP") : "Pick a date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Options</Label>
+            <div className="space-y-2">
+              {options.map((option, index) => (
+                <Input
+                  key={index}
+                  type="text"
+                  value={option}
+                  onChange={(e) => updateOption(index, e.target.value)}
+                  required
+                  placeholder={`Option ${index + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            onClick={addOption}
+            variant="outline"
+            size="sm"
+            className="w-full border-dashed hover:border-primary/50"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Option
+          </Button>
+        </CardContent>
+
+        <CardFooter>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              'Create Poll'
+            )}
+          </Button>
+        </CardFooter>
       </form>
-    </div>
+    </Card>
   );
 }

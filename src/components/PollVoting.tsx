@@ -1,145 +1,142 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Poll, PollOption, Vote } from '../types/database.types';
 
-interface PollVotingProps {
-  pollId: string;
-}
+  if (!poll) return <LoadingSpinner />;
 
-export default function PollVoting({ pollId }: PollVotingProps) {
-  const [poll, setPoll] = useState<Poll | null>(null);
-  const [options, setOptions] = useState<PollOption[]>([]);
-  const [votes, setVotes] = useState<Record<string, number>>({});
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [hasVoted, setHasVoted] = useState(false);
-  const [totalVotes, setTotalVotes] = useState(0);
-
-  useEffect(() => {
-    fetchPollData();
-    subscribeToVotes();
-  }, [pollId]);
-
-  const fetchPollData = async () => {
-    // Fetch poll details
-    const { data: pollData } = await supabase
-      .from('polls')
-      .select('*')
-      .eq('id', pollId)
-      .single();
-
-    if (pollData) setPoll(pollData);
-
-    // Fetch poll options
-    const { data: optionsData } = await supabase
-      .from('poll_options')
-      .select('*')
-      .eq('poll_id', pollId);
-
-    if (optionsData) {
-      setOptions(optionsData);
-      
-      // Fetch current votes
-      const { data: votesData } = await supabase
-        .from('votes')
-        .select('option_id')
-        .eq('poll_id', pollId);
-
-      if (votesData) {
-        const voteCounts: Record<string, number> = {};
-        votesData.forEach((vote: Vote) => {
-          voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1;
-        });
-        setVotes(voteCounts);
-        setTotalVotes(votesData.length);
-      }
-    }
-  };
-
-  const subscribeToVotes = () => {
-    const subscription = supabase
-      .channel(`poll_${pollId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'votes',
-        filter: `poll_id=eq.${pollId}`
-      }, fetchPollData)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  };
-
-  const submitVote = async (optionId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
+  const toggleShowResults = async () => {
+    if (!isAdmin) return;
     
-    if (!user) {
-      alert('Please sign in to vote');
-      return;
-    }
-
     const { error } = await supabase
-      .from('votes')
-      .insert([
-        {
-          poll_id: pollId,
-          option_id: optionId,
-          user_id: user.id
-        }
-      ]);
+      .from('polls')
+      .update({ show_results: !poll?.show_results })
+      .eq('id', pollId);
 
     if (error) {
-      console.error('Error submitting vote:', error);
-      alert('Failed to submit vote');
-    } else {
-      setHasVoted(true);
-      setSelectedOption(optionId);
+      toast({
+        title: "Error",
+        description: "Failed to update poll settings",
+        variant: "destructive"
+      });
     }
   };
 
-  if (!poll) return <div>Loading...</div>;
+  const shouldShowResults = () => {
+    if (!poll) return false;
+    if (isAdmin) return true;
+    return poll.show_results || hasVoted;
+  };
+
+  const isPollEnded = () => {
+    if (!poll?.end_date) return false;
+    return new Date(poll.end_date) < new Date();
+  };
+
+  if (!poll) return <LoadingSpinner />;
 
   return (
-    <div className="max-w-lg mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-6">{poll.title}</h2>
-      <div className="space-y-4">
-        {options.map((option) => {
-          const voteCount = votes[option.id] || 0;
-          const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
-
-          return (
-            <div key={option.id} className="space-y-2">
-              <button
-                onClick={() => !hasVoted && submitVote(option.id)}
-                disabled={hasVoted}
-                className={`w-full p-4 rounded-md border ${
-                  selectedOption === option.id
-                    ? 'bg-blue-100 border-blue-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span>{option.text}</span>
-                  <span>{voteCount} votes</span>
-                </div>
-                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500"
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {percentage.toFixed(1)}%
-                </div>
-              </button>
+    <>
+      {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
+      <Card className="max-w-lg mx-auto">
+        <CardHeader className="space-y-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                {poll.title}
+                {poll.require_auth && <Lock className="h-4 w-4 text-muted-foreground" />}
+                {poll.end_date && <Timer className="h-4 w-4 text-muted-foreground" />}
+              </CardTitle>
+              <CardDescription>{poll.description || "Cast your vote and see real-time results"}</CardDescription>
+              {poll.end_date && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ends {format(new Date(poll.end_date), 'PPp')}
+                </p>
+              )}
             </div>
-          );
-        })}
-      </div>
-      <div className="mt-4 text-center text-gray-600">
-        Total votes: {totalVotes}
-      </div>
-    </div>
+            <div className="flex gap-2">
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 hover:bg-muted"
+                  onClick={toggleShowResults}
+                >
+                  {poll.show_results ? (
+                    <Eye className="h-4 w-4" />
+                  ) : (
+                    <EyeOff className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 hover:bg-muted"
+                onClick={() => setShowQR(!showQR)}
+              >
+                <QrCode className="h-4 w-4" />
+              </Button>
+              <ShareDialog url={typeof window !== 'undefined' ? window.location.href : ''}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 hover:bg-muted"
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
+              </ShareDialog>
+            </div>
+          </div>
+          {showQR && (
+            <div className="flex justify-center p-4 bg-white rounded-lg">
+              <QRCodeSVG
+                value={typeof window !== 'undefined' ? window.location.href : ''}
+                size={200}
+                includeMargin
+              />
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-4">
+            {options.map((option) => {
+              const voteCount = votes[option.id] || 0;
+              const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+              const isDisabled = hasVoted || isPollEnded();
+
+              return (
+                <div key={option.id} className="space-y-3">
+                  <Button
+                    onClick={() => !isDisabled && submitVote(option.id)}
+                    disabled={isDisabled}
+                    variant={selectedOption === option.id ? "secondary" : "outline"}
+                    className={`w-full justify-between h-auto py-3 px-4 ${isDisabled ? 'opacity-80' : 'hover:bg-muted'}`}
+                  >
+                    <span className="font-normal">{option.text}</span>
+                    {shouldShowResults() && (
+                      <span className="font-medium ml-2 text-muted-foreground">{voteCount} votes</span>
+                    )}
+                  </Button>
+                  {shouldShowResults() && (
+                    <div className="space-y-1">
+                      <Progress value={percentage} className="h-2" />
+                      <div className="text-sm text-muted-foreground">
+                        {percentage.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {shouldShowResults() && (
+            <div className="text-center text-sm text-muted-foreground pt-4 border-t border-border">
+              Total votes: {totalVotes}
+              {isPollEnded() && (
+                <p className="mt-1 text-destructive">This poll has ended</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

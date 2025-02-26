@@ -1,3 +1,102 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Auth Styles */
+.auth-container {
+  @apply w-full;
+}
+
+.auth-button {
+  @apply w-full flex items-center justify-center gap-2 py-2 px-4 rounded-md transition-colors
+         bg-zinc-900 hover:bg-zinc-800 text-white
+         dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-900;
+}
+
+.auth-input {
+  @apply w-full px-3 py-2 rounded-md border border-zinc-200
+         bg-white text-zinc-900 placeholder-zinc-500
+         dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-400
+         focus:outline-none focus:ring-2 focus:ring-zinc-500 dark:focus:ring-zinc-400;
+}
+
+.auth-container [data-supabase-auth-divider] {
+  @apply my-4 text-zinc-500 dark:text-zinc-400;
+}
+
+.auth-container [data-supabase-auth-label] {
+  @apply block mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-50;
+}
+
+.auth-container [data-supabase-auth-message] {
+  @apply mt-2 text-sm text-zinc-500 dark:text-zinc-400;
+}
+ 
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 196 100% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 196 100% 50%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 196 100% 50%;
+    --radius: 0.75rem;
+    --nav-bg: 196 100% 98%;
+  }
+ 
+  .dark {
+    --background: 222 47% 4%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 4%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 4%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 196 100% 50%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 196 100% 50%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 196 100% 50%;
+    --nav-bg: 222 47% 4%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
