@@ -221,7 +221,7 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="shrink-0 hover:bg-muted"
+                className="shrink-0 hover:bg-blue-600/10"
                 onClick={toggleShowResults}
               >
                 {poll.show_results ? (
@@ -233,7 +233,7 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="shrink-0 hover:bg-muted"
+                className="shrink-0 hover:bg-blue-600/10"
                 onClick={() => setShowQR(!showQR)}
               >
                 <QrCode className="h-4 w-4" />
@@ -242,7 +242,7 @@ export default function PollAdmin({ pollId }: PollAdminProps) {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="shrink-0 hover:bg-muted"
+                  className="shrink-0 hover:bg-blue-600/10"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>

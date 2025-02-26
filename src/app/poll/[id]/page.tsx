@@ -32,6 +32,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
 
     loadData()
 
+    if (!supabase) return
+
     // Setup realtime subscriptions with broadcast
     const channelId = `poll_${params.id}`
     console.log('Setting up realtime subscriptions:', channelId)
@@ -46,27 +48,33 @@ export default function PollPage({ params }: { params: { id: string } }) {
           table: 'votes',
           filter: `poll_id=eq.${params.id}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('Vote change detected:', payload)
-          if (payload.eventType === 'INSERT') {
-            // Handle new vote
-            const newVote = payload.new as { option_id: string }
-            setVotes(prev => ({
-              ...prev,
-              [newVote.option_id]: (prev[newVote.option_id] || 0) + 1
-            }))
-            setTotalVotes(prev => prev + 1)
-          } else if (payload.eventType === 'DELETE') {
-            // Handle vote removal
-            const oldVote = payload.old as { option_id: string }
-            setVotes(prev => ({
-              ...prev,
-              [oldVote.option_id]: Math.max(0, (prev[oldVote.option_id] || 0) - 1)
-            }))
-            setTotalVotes(prev => Math.max(0, prev - 1))
+          if (!supabase) return
+
+          // Fetch fresh vote counts instead of incrementing/decrementing
+          const { data: votesData, error: votesError } = await supabase
+            .from('votes')
+            .select('option_id')
+            .eq('poll_id', params.id)
+
+          if (votesError) {
+            console.error('Error fetching votes:', votesError)
+            return
           }
+
+          // Count votes per option
+          const voteCounts: Record<string, number> = {}
+          votesData?.forEach(vote => {
+            voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
+          })
+          
+          console.log('Updated vote counts:', voteCounts)
+          setVotes(voteCounts)
+          setTotalVotes(votesData?.length || 0)
+          
           // Check if the current user's vote status has changed
-          checkUserVote()
+          await checkUserVote()
         }
       )
       // Subscribe to poll changes
@@ -101,10 +109,12 @@ export default function PollPage({ params }: { params: { id: string } }) {
       }
     })
 
-    return () => {
+    const cleanup = () => {
       console.log('Cleaning up realtime subscription:', channelId)
       channel.unsubscribe()
     }
+
+    return cleanup
   }, [params.id])
 
   const fetchPollData = async () => {
@@ -168,8 +178,13 @@ export default function PollPage({ params }: { params: { id: string } }) {
         throw votesError
       }
 
-      // Count votes per option
+      // Initialize vote counts for all options to 0
       const voteCounts: Record<string, number> = {}
+      optionsData.forEach(option => {
+        voteCounts[option.id] = 0
+      })
+
+      // Count actual votes
       votesData?.forEach(vote => {
         voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
       })
@@ -192,29 +207,24 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const checkUserVote = async () => {
     if (!supabase) return
     
-    // Check for authenticated user vote
+    // Get user session and client ID
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user?.id) {
-      const { data } = await supabase
-        .from('votes')
-        .select('option_id')
-        .eq('poll_id', params.id)
-        .eq('user_id', session.user.id)
-        .single()
+    const userId = session?.user?.id
+    const clientId = userId || localStorage.getItem('anonymous_client_id')
 
-      if (data) {
-        setHasVoted(true)
-        setSelectedOption(data.option_id)
-        return
-      }
-    }
+    if (!userId && !clientId) return
 
-    // Check for anonymous vote in local storage
-    const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
-    const hasVotedAnonymously = localVotes[params.id]
-    if (hasVotedAnonymously) {
+    // Check for existing vote using user_id or client_id
+    const { data } = await supabase
+      .from('votes')
+      .select('option_id')
+      .eq('poll_id', params.id)
+      .or(`user_id.eq.${userId},client_id.eq.${clientId}`)
+      .maybeSingle()
+
+    if (data) {
       setHasVoted(true)
-      setSelectedOption(hasVotedAnonymously.option_id)
+      setSelectedOption(data.option_id)
     }
   }
 
@@ -232,57 +242,41 @@ export default function PollPage({ params }: { params: { id: string } }) {
         return
       }
 
-      // Get user session
+      // Get user session and client ID
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
+      let clientId = localStorage.getItem('anonymous_client_id')
+      
+      if (!userId && !clientId) {
+        clientId = crypto.randomUUID()
+        localStorage.setItem('anonymous_client_id', clientId)
+      }
 
       // Check for existing vote
-      if (userId) {
-        const { data: existingVote } = await supabase
-          .from('votes')
-          .select('id')
-          .eq('poll_id', params.id)
-          .eq('user_id', userId)
-          .maybeSingle()
+      const { data: existingVote } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('poll_id', params.id)
+        .or(`user_id.eq.${userId},client_id.eq.${clientId}`)
+        .maybeSingle()
 
-        if (existingVote) {
-          toast({
-            title: "Error",
-            description: "You have already voted in this poll",
-            variant: "destructive"
-          })
-          return
-        }
-      } else {
-        // Check for anonymous vote in local storage
-        const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
-        if (localVotes[params.id]) {
-          toast({
-            title: "Error",
-            description: "You have already voted in this poll",
-            variant: "destructive"
-          })
-          return
-        }
+      if (existingVote) {
+        toast({
+          title: "Error",
+          description: "You have already voted in this poll",
+          variant: "destructive"
+        })
+        return
       }
 
       // Create vote object
       const newVote = {
         poll_id: params.id,
         option_id: optionId,
-        user_id: userId || null,
-        created_at: new Date().toISOString(),
-        anonymous: !userId
+        user_id: userId,
+        client_id: userId ? null : clientId,
+        created_at: new Date().toISOString()
       }
-
-      // Optimistically update UI
-      setHasVoted(true)
-      setSelectedOption(optionId)
-      setVotes(prev => ({
-        ...prev,
-        [optionId]: (prev[optionId] || 0) + 1
-      }))
-      setTotalVotes(prev => prev + 1)
 
       // Submit to database
       const { error } = await supabase
@@ -290,26 +284,38 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .insert(newVote)
 
       if (error) {
-        // Revert optimistic updates on error
-        setHasVoted(false)
-        setSelectedOption(null)
-        setVotes(prev => ({
-          ...prev,
-          [optionId]: Math.max(0, (prev[optionId] || 0) - 1)
-        }))
-        setTotalVotes(prev => Math.max(0, prev - 1))
+        console.error('Error submitting vote:', error)
         throw error
       }
 
-      // Store anonymous vote in local storage
-      if (!userId) {
-        const localVotes = JSON.parse(localStorage.getItem('anonymous_votes') || '{}')
-        localVotes[params.id] = {
-          option_id: optionId,
-          created_at: newVote.created_at
-        }
-        localStorage.setItem('anonymous_votes', JSON.stringify(localVotes))
+      // Update UI after successful submission
+      setHasVoted(true)
+      setSelectedOption(optionId)
+
+      // Fetch fresh vote counts
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
+        .select('option_id')
+        .eq('poll_id', params.id)
+
+      if (votesError) {
+        console.error('Error fetching votes:', votesError)
+        throw votesError
       }
+
+      // Count votes per option
+      const voteCounts: Record<string, number> = {}
+      options.forEach(option => {
+        voteCounts[option.id] = 0
+      })
+      votesData?.forEach(vote => {
+        voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
+      })
+
+      setVotes(voteCounts)
+      setTotalVotes(votesData?.length || 0)
+
+
 
       toast({
         title: "Success",

@@ -108,7 +108,7 @@ export function PollVoting({
               <Button
                 variant="outline"
                 size="icon"
-                className="shrink-0 hover:bg-muted w-10 h-10 sm:w-8 sm:h-8"
+                className="shrink-0 hover:bg-blue-600/10 w-10 h-10 sm:w-8 sm:h-8"
                 onClick={() => setShowQR(!showQR)}
               >
                 <QrCode className="h-4 w-4" />
@@ -117,7 +117,7 @@ export function PollVoting({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="shrink-0 hover:bg-muted w-10 h-10 sm:w-8 sm:h-8"
+                  className="shrink-0 hover:bg-blue-600/10 w-10 h-10 sm:w-8 sm:h-8"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -147,7 +147,7 @@ export function PollVoting({
                     onClick={() => !isDisabled && setSelectedChoice(option.id)}
                     disabled={isDisabled}
                     variant={selectedChoice === option.id || selectedOption === option.id ? "secondary" : "outline"}
-                    className={`w-full justify-between h-auto py-3 px-4 text-left ${isDisabled ? 'opacity-80' : 'hover:bg-muted'}`}
+                    className={`w-full justify-between h-auto py-3 px-4 text-left ${isDisabled ? 'opacity-80' : 'hover:bg-blue-600/10'}`}
                   >
                     <span className="font-normal break-words">{option.text}</span>
                     {shouldShowResults() && (

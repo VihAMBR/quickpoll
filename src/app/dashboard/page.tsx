@@ -60,11 +60,12 @@ export default function DashboardPage() {
         totalPolls: polls?.length || 0,
         totalVotes: votes?.length || 0,
         activePolls: polls?.filter(p => {
-          const startDate = new Date(p.start_date)
+          // If no end_date, poll is active
+          if (!p.end_date) return true
           const endDate = new Date(p.end_date)
-          return startDate <= now && endDate > now
+          return endDate > now
         })?.length || 0,
-        completedPolls: polls?.filter(p => new Date(p.end_date) <= now)?.length || 0
+        completedPolls: polls?.filter(p => p.end_date && new Date(p.end_date) <= now)?.length || 0
       }
 
       // Get 5 most recent polls

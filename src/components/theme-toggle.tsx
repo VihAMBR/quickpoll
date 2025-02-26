@@ -20,7 +20,7 @@ export function ThemeToggle() {
     <Button 
       variant="ghost" 
       size="icon" 
-      className="h-9 w-9 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      className="h-9 w-9 hover:bg-blue-600/10 dark:hover:bg-blue-600/20"
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
     >
       <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
