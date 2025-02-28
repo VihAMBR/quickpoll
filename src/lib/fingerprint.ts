@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import FingerprintJS from '@fingerprintjs/fingerprintjs'
 
 let cachedFingerprint: string | null = null
@@ -17,4 +18,31 @@ export async function getDeviceFingerprint(): Promise<string> {
   // This is the visitor identifier:
   cachedFingerprint = result.visitorId
   return cachedFingerprint
+}
+
+export function useFingerprint() {
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const getFingerprint = async () => {
+      try {
+        const fp = await getDeviceFingerprint();
+        if (mounted) {
+          setDeviceId(fp);
+        }
+      } catch (error) {
+        console.error('Error getting fingerprint:', error);
+      }
+    };
+
+    getFingerprint();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return { deviceId };
 }

@@ -6,16 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ShareDialog } from '@/components/ui/share-dialog';
-import { Lock, Timer, Share2, QrCode } from 'lucide-react';
+import { Lock, Timer, Share2, QrCode, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import Confetti from 'react-confetti';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+import { PollCharts } from '@/components/ui/poll-charts';
+import { ShortAnswerVoting } from '@/components/question-types/ShortAnswerVoting';
+import { RankingVoting } from '@/components/question-types/RankingVoting';
+import { RatingVoting } from '@/components/question-types/RatingVoting';
 
 
-import type { Poll, Option } from '@/types/database.types';
+import type { Poll, Option, PollMetrics } from '@/types/database.types';
 
 interface PollVotingProps {
   poll: Poll | null;
@@ -26,7 +30,9 @@ interface PollVotingProps {
   hasVoted: boolean;
   selectedOption: string | null;
   isAdmin: boolean;
+  metrics?: PollMetrics;
   submitVote: (optionId: string) => Promise<void>;
+  userId?: string;
 }
 
 export function PollVoting({ 
@@ -38,15 +44,30 @@ export function PollVoting({
   hasVoted,
   selectedOption,
   isAdmin,
-  submitVote
+  submitVote,
+  userId
 }: PollVotingProps) {
   const [showQR, setShowQR] = useState(false);
   const [showConfetti] = useState(false);
-  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
+  const [selectedChoices, setSelectedChoices] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
+
+  const handleVoteClick = async (optionId: string) => {
+    try {
+      await submitVote(optionId);
+      router.refresh();
+    } catch (error) {
+      console.error('Error submitting vote:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit vote. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
 
   if (!poll) {
     console.log('No poll data');
@@ -78,7 +99,7 @@ export function PollVoting({
 
   const shouldShowResults = () => {
     if (!poll) return false;
-    return isAdmin || hasVoted;
+    return isAdmin || hasVoted || poll.show_results;
   };
 
   const isPollEnded = () => {
@@ -86,20 +107,177 @@ export function PollVoting({
     return new Date(poll.end_date) < new Date();
   };
 
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`/api/polls/${pollId}/export`);
+      if (!response.ok) throw new Error('Failed to export results');
+
+      // Create a blob from the CSV data
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      // Create a temporary link and click it to download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `poll-${pollId}-results.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting results:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export results. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const renderVotingComponent = () => {
+    if (!poll) return null;
+
+    switch (poll.question_type) {
+      case 'short_answer':
+        return (
+          <ShortAnswerVoting
+            pollId={pollId}
+            userId={userId || undefined}
+            onVoteSubmitted={() => router.refresh()}
+          />
+        );
+
+      case 'ranking':
+        return (
+          <RankingVoting
+            pollId={pollId}
+            options={options}
+            userId={userId}
+            onVoteSubmitted={() => router.refresh()}
+          />
+        );
+
+      case 'rating':
+        return (
+          <RatingVoting
+            pollId={pollId}
+            maxRating={poll.rating_scale_max || 5}
+            userId={userId}
+            onVoteSubmitted={() => router.refresh()}
+          />
+        );
+
+      case 'true_false':
+      case 'multiple_choice':
+      default:
+        return (
+          <div className="space-y-4">
+            {options.map((option) => {
+              const voteCount = votes[option.id] || 0;
+              const votePercentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+              const isSelected = poll.allow_multiple_choices 
+                ? selectedChoices.has(option.id)
+                : selectedOption === option.id;
+
+              return (
+                <div key={option.id} className="space-y-2">
+                  <Button
+                    variant={isSelected ? "default" : "outline"}
+                    className="w-full justify-start h-auto py-4 px-4"
+                    onClick={() => {
+                      if (poll.allow_multiple_choices) {
+                        const newChoices = new Set(selectedChoices);
+                        if (newChoices.has(option.id)) {
+                          newChoices.delete(option.id);
+                        } else if (newChoices.size < poll.max_choices) {
+                          newChoices.add(option.id);
+                        }
+                        setSelectedChoices(newChoices);
+                      } else {
+                        submitVote(option.id);
+                      }
+                    }}
+                    disabled={hasVoted || isPollEnded()}
+                  >
+                    <div className="flex flex-col items-start gap-2 w-full">
+                      <div className="flex items-center gap-2 w-full">
+                        <span>{option.text}</span>
+                      </div>
+                      {option.image_url && (
+                        <img
+                          src={option.image_url}
+                          alt={option.text}
+                          className="w-full h-40 object-cover rounded-md"
+                        />
+                      )}
+                    </div>
+                  </Button>
+
+                  {shouldShowResults() && (
+                    <div className="space-y-1">
+                      <Progress value={votePercentage} />
+                      <div className="text-sm text-muted-foreground">
+                        {voteCount} vote{voteCount !== 1 ? 's' : ''} ({votePercentage.toFixed(1)}%)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {poll.allow_multiple_choices && selectedChoices.size > 0 && (
+              <Button
+                className="w-full"
+                onClick={async () => {
+                  setIsSubmitting(true);
+                  try {
+                    const choicesArray = Array.from(selectedChoices);
+                    for (const optionId of choicesArray) {
+                      await submitVote(optionId);
+                    }
+                    setSelectedChoices(new Set());
+                  } catch (error) {
+                    console.error('Error submitting votes:', error);
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                Submit Votes ({selectedChoices.size}/{poll.max_choices})
+              </Button>
+            )}
+          </div>
+        );
+    }
+  };
+
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
       <Card className="w-full max-w-lg mx-auto shadow-lg overflow-hidden relative">
-
         <CardHeader className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                {poll.title}
-                {poll.require_auth && <Lock className="h-4 w-4 text-muted-foreground" />}
-                {poll.end_date && <Timer className="h-4 w-4 text-muted-foreground" />}
-              </CardTitle>
-              <CardDescription>{poll.description || "Cast your vote and see real-time results"}</CardDescription>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  {poll.title}
+                  {poll.require_auth && <Lock className="h-4 w-4 text-muted-foreground" />}
+                  {poll.end_date && <Timer className="h-4 w-4 text-muted-foreground" />}
+                </CardTitle>
+                <CardDescription>{poll.description || "Cast your vote and see real-time results"}</CardDescription>
+              </div>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Export Results
+                </Button>
+              )}
               {poll.end_date && (
                 <p className="text-sm text-muted-foreground mt-1">
                   Ends {format(new Date(poll.end_date), 'PPp')}
@@ -161,18 +339,28 @@ export function PollVoting({
               const voteCount = votes[option.id] || 0;
               const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
               const isDisabled = hasVoted || isPollEnded();
+              const isSelected = selectedChoices.has(option.id) || selectedOption === option.id;
 
               return (
                 <div key={option.id} className="space-y-3">
                   <Button
-                    onClick={() => !isDisabled && setSelectedChoice(option.id)}
+                    onClick={() => !isDisabled && handleVoteClick(option.id)}
                     disabled={isDisabled}
-                    variant={selectedChoice === option.id || selectedOption === option.id ? "secondary" : "outline"}
+                    variant={isSelected ? "secondary" : "outline"}
                     className={`w-full justify-between h-auto py-3 px-4 text-left break-words ${isDisabled ? 'opacity-80' : 'hover:bg-blue-600/10'}`}
                   >
-                    <span className="font-normal break-words flex-1 mr-2">{option.text}</span>
+                    <div className="flex items-center gap-4 flex-1">
+                      {option.image_url && (
+                        <img 
+                          src={option.image_url} 
+                          alt={option.text}
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      )}
+                      <span className="font-normal break-words flex-1">{option.text}</span>
+                    </div>
                     {shouldShowResults() && (
-                      <span className="font-medium text-muted-foreground whitespace-nowrap text-sm">{voteCount} votes</span>
+                      <span className="font-medium text-muted-foreground whitespace-nowrap text-sm ml-2">{voteCount} votes</span>
                     )}
                   </Button>
                   {shouldShowResults() && (
@@ -191,17 +379,55 @@ export function PollVoting({
           
           {!hasVoted && !isPollEnded() && (
             <div className="sticky bottom-0 left-0 right-0 p-4 bg-background border-t mt-6 -mx-6 -mb-6 sm:bg-transparent sm:border-0 sm:p-0 sm:m-0 sm:static">
-              <Button
-                onClick={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (selectedChoice) {
+              {poll.allow_multiple_choices ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    Select up to {poll.max_choices} options
+                  </p>
+                  <Button
+                    onClick={async () => {
+                      if (selectedChoices.size === 0) return;
+                      setIsSubmitting(true);
+                      try {
+                        // Submit each selected choice
+                        const choicesArray = Array.from(selectedChoices);
+                        for (const optionId of choicesArray) {
+                          await submitVote(optionId);
+                        }
+                        setSelectedChoices(new Set());
+                      } catch (error) {
+                        console.error('Error submitting votes:', error);
+                        toast({
+                          title: "Error",
+                          description: "Failed to submit votes. Please try again.",
+                          variant: "destructive"
+                        });
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }}
+                    disabled={selectedChoices.size === 0 || isSubmitting || hasVoted || isPollEnded()}
+                    className="w-full sm:w-auto shadow-sm active:scale-95 transition-transform"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <LoadingSpinner className="mr-2 h-4 w-4 animate-spin" showText={false} />
+                        Submitting...
+                      </>
+                    ) : (
+                      `Submit Votes (${selectedChoices.size}/${poll.max_choices})`
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={async () => {
+                    const selectedChoice = Array.from(selectedChoices)[0];
+                    if (!selectedChoice) return;
                     setIsSubmitting(true);
                     try {
-                      console.log('Submitting vote for option:', selectedChoice);
                       await submitVote(selectedChoice);
-                      console.log('Vote submitted successfully');
-                      setSelectedChoice(null);
+                      setSelectedChoices(new Set());
                     } catch (error) {
                       console.error('Error submitting vote:', error);
                       toast({
@@ -212,29 +438,37 @@ export function PollVoting({
                     } finally {
                       setIsSubmitting(false);
                     }
-                  }
-                }}
-                disabled={!selectedChoice || isSubmitting || hasVoted || isPollEnded()}
-                className="w-full sm:w-auto shadow-sm active:scale-95 transition-transform"
-              >
-                {isSubmitting ? (
-                  <>
-                    <LoadingSpinner className="mr-2 h-4 w-4 animate-spin" showText={false} />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Vote'
-                )}
-              </Button>
+                  }}
+                  disabled={selectedChoices.size === 0 || isSubmitting || hasVoted || isPollEnded()}
+                  className="w-full sm:w-auto shadow-sm active:scale-95 transition-transform"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <LoadingSpinner className="mr-2 h-4 w-4 animate-spin" showText={false} />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Vote'
+                  )}
+                </Button>
+              )}
             </div>
           )}
 
           {shouldShowResults() && (
-            <div className="text-center text-sm text-muted-foreground pt-4 border-t border-border">
-              Total votes: {totalVotes}
-              {isPollEnded() && (
-                <p className="mt-1 text-destructive">This poll has ended</p>
-              )}
+            <div className="space-y-6 pt-4 border-t border-border">
+              <div className="text-center text-sm text-muted-foreground">
+                Total votes: {totalVotes}
+                {isPollEnded() && (
+                  <p className="mt-1 text-destructive">This poll has ended</p>
+                )}
+              </div>
+              <PollCharts 
+                options={options}
+                votes={votes}
+                totalVotes={totalVotes}
+                metrics={poll.metrics}
+              />
             </div>
           )}
         </CardContent>
