@@ -133,33 +133,6 @@ export function PollVoting({
     return new Date(poll.end_date) < new Date();
   };
 
-  const handleExport = async () => {
-    try {
-      const response = await fetch(`/api/polls/${pollId}/export`);
-      if (!response.ok) throw new Error('Failed to export results');
-
-      // Create a blob from the CSV data
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      // Create a temporary link and click it to download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `poll-${pollId}-results.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error exporting results:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to export results. Please try again.',
-        variant: 'destructive'
-      });
-    }
-  };
-
   const renderVotingComponent = () => {
     if (!poll) return null;
 
@@ -297,15 +270,6 @@ export function PollVoting({
                     </CardTitle>
                     <CardDescription className="text-base">{poll.description || "Cast your vote and see real-time results"}</CardDescription>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExport}
-                    className="flex items-center gap-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    Export Results
-                  </Button>
                 </div>
               </CardHeader>
               

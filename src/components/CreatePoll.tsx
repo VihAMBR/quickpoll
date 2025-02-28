@@ -260,7 +260,7 @@ export default function CreatePoll() {
           <Button
             type="submit"
             disabled={isSubmitting}
-            className="w-full"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors shadow-md hover:shadow-lg"
           >
             {isSubmitting ? (
               <>

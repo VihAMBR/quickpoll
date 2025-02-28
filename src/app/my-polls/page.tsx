@@ -180,11 +180,11 @@ export default function MyPolls() {
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">My Polls</h1>
-        <Button onClick={() => router.push('/create')}>Create New Poll</Button>
+        <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors shadow-md hover:shadow-lg" onClick={() => router.push('/create')}>Create New Poll</Button>
       </div>
 
       {polls.length === 0 ? (
-        <Card className="text-center p-10">
+        <Card className="text-center p-10 border border-border shadow-sm">
           <CardHeader>
             <CardTitle>No Polls Found</CardTitle>
             <CardDescription>
@@ -192,13 +192,13 @@ export default function MyPolls() {
             </CardDescription>
           </CardHeader>
           <CardFooter className="flex justify-center">
-            <Button onClick={() => router.push('/create')}>Create Poll</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors shadow-md hover:shadow-lg" onClick={() => router.push('/create')}>Create Poll</Button>
           </CardFooter>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {polls.map((poll) => (
-            <Card key={poll.id} className="overflow-hidden flex flex-col h-full">
+            <Card key={poll.id} className="overflow-hidden flex flex-col h-full border border-border shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="truncate text-xl">{poll.title}</CardTitle>
                 <CardDescription className="line-clamp-2 min-h-[2.5rem]">
@@ -209,21 +209,21 @@ export default function MyPolls() {
               <CardContent className="py-2 flex-grow">
                 <div className="text-sm text-muted-foreground space-y-2">
                   <div>
-                    <span className="font-medium">Created:</span> {formatDate(poll.created_at)}
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Created:</span> {formatDate(poll.created_at)}
                   </div>
                   <div>
-                    <span className="font-medium">Type:</span> {poll.question_type.replace('_', ' ')}
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Type:</span> {poll.question_type.replace('_', ' ')}
                   </div>
                   <div>
-                    <span className="font-medium">Results:</span> {poll.show_results ? 'Visible' : 'Hidden'}
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Results:</span> {poll.show_results ? 'Visible' : 'Hidden'}
                   </div>
                 </div>
               </CardContent>
               
               <CardFooter className="flex flex-wrap gap-2 justify-between pt-3">
                 <Link href={`/poll/${poll.id}`} passHref>
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <EyeIcon className="h-4 w-4 mr-1" /> View Poll
+                  <Button variant="outline" size="sm" className="flex-1 border-blue-200 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-900 dark:hover:text-blue-200">
+                    <EyeIcon className="h-4 w-4 mr-1 text-blue-600" /> View Poll
                   </Button>
                 </Link>
                 
@@ -233,8 +233,9 @@ export default function MyPolls() {
                     size="icon"
                     onClick={() => toggleResults(poll.id, poll.show_results)}
                     title={poll.show_results ? 'Hide results from voters' : 'Show results to voters'}
+                    className="border-blue-200 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-900 dark:hover:text-blue-200"
                   >
-                    <EyeIcon className="h-4 w-4" />
+                    <EyeIcon className="h-4 w-4 text-blue-600" />
                   </Button>
                   
                   <Button 
@@ -242,8 +243,9 @@ export default function MyPolls() {
                     size="icon"
                     onClick={() => sharePoll(poll.id)}
                     title="Share poll link"
+                    className="border-blue-200 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-900 dark:hover:text-blue-200"
                   >
-                    <Share2 className="h-4 w-4" />
+                    <Share2 className="h-4 w-4 text-blue-600" />
                   </Button>
                   
                   <Button 
@@ -251,8 +253,9 @@ export default function MyPolls() {
                     size="icon"
                     onClick={() => deletePoll(poll.id)}
                     title="Delete poll"
+                    className="border-blue-200 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-900 dark:hover:text-blue-200"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 text-blue-600" />
                   </Button>
                 </div>
               </CardFooter>

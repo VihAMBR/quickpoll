@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { PollVoting } from "@/components/PollVoting"
+import { Navigation } from '@/components/navigation'
 import { supabase } from '@/lib/supabase'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { Poll, Option } from '@/types/database.types'
 import { useToast } from '@/components/ui/use-toast'
 import { NameDialog } from '@/components/ui/name-dialog'
 import { getDeviceFingerprint } from '@/lib/fingerprint'
+import { Analytics } from "@vercel/analytics/react"
 
 export default function PollPage({ params }: { params: { id: string } }) {
   const [poll, setPoll] = useState<Poll | null>(null)
@@ -356,24 +358,31 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }
 
   return loading ? (
-    <LoadingSpinner />
+    <>
+      <Navigation />
+      <LoadingSpinner />
+    </>
   ) : (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
-      <NameDialog open={showNameDialog} onSubmit={handleNameSubmit} />
-      <div className={`w-full ${isAdmin ? 'max-w-full px-4' : 'max-w-2xl'}`}>
-        <PollVoting
-          key={isAdmin ? componentKey : `poll-${params.id}-votes-${totalVotes}-update-${updateCounter}`}
-          poll={poll}
-          pollId={params.id}
-          options={options}
-          votes={votes}
-          totalVotes={totalVotes}
-          hasVoted={hasVoted}
-          selectedOption={selectedOption}
-          isAdmin={isAdmin}
-          submitVote={submitVote}
-        />
+    <>
+      <Navigation />
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4 pt-24">
+        <NameDialog open={showNameDialog} onSubmit={handleNameSubmit} />
+        <div className={`w-full ${isAdmin ? 'max-w-full px-4' : 'max-w-2xl'}`}>
+          <PollVoting
+            key={isAdmin ? componentKey : `poll-${params.id}-votes-${totalVotes}-update-${updateCounter}`}
+            poll={poll}
+            pollId={params.id}
+            options={options}
+            votes={votes}
+            totalVotes={totalVotes}
+            hasVoted={hasVoted}
+            selectedOption={selectedOption}
+            isAdmin={isAdmin}
+            submitVote={submitVote}
+          />
+        </div>
+        <Analytics />
       </div>
-    </div>
+    </>
   )
 }
