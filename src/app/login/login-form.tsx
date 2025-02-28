@@ -12,13 +12,15 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const returnTo = searchParams.get('returnTo') || '/';
+  // If returnTo is a full URL, use it as is, otherwise prepend origin
+  const redirectUrl = returnTo.startsWith('http') ? returnTo : `${window.location.origin}${returnTo}`;
 
   // Check if already logged in
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        router.push(returnTo);
+        window.location.href = redirectUrl;
       }
     };
     checkSession();
@@ -30,7 +32,7 @@ export default function LoginForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`
+          redirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(redirectUrl)}`
         }
       });
       if (error) throw error;
