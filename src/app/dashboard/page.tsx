@@ -35,6 +35,26 @@ export default function DashboardPage() {
         return
       }
       fetchDashboardData(session.user.id)
+
+      // Setup real-time subscription for votes
+      const channel = supabase.channel('dashboard_votes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'votes'
+          },
+          () => {
+            console.log('Vote change detected, refreshing dashboard data')
+            fetchDashboardData(session.user.id)
+          }
+        )
+        .subscribe()
+
+      return () => {
+        channel.unsubscribe()
+      }
     }
     checkUser()
   }, [router])
@@ -46,19 +66,13 @@ export default function DashboardPage() {
       // Fetch polls created by user
       const { data: polls } = await supabase
         .from('polls')
-        .select('*')
+        .select('*, votes(count)')
         .eq('created_by', userId)
-
-      // Fetch total votes
-      const { data: votes } = await supabase
-        .from('votes')
-        .select('poll_id')
-        .in('poll_id', polls?.map(p => p.id) || [])
 
       const now = new Date()
       const stats: DashboardStats = {
         totalPolls: polls?.length || 0,
-        totalVotes: votes?.length || 0,
+        totalVotes: polls?.reduce((acc, poll) => acc + (poll.votes?.[0]?.count || 0), 0) || 0,
         activePolls: polls?.filter(p => {
           // If no end_date, poll is active
           if (!p.end_date) return true
@@ -72,6 +86,7 @@ export default function DashboardPage() {
       const recentPolls = polls
         ?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         ?.slice(0, 5)
+        ?.map(({ votes, ...poll }) => poll) // Remove votes count from recent polls
 
       setStats(stats)
       setRecentPolls(recentPolls || [])
