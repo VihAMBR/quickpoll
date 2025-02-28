@@ -149,7 +149,7 @@ export default function CreatePoll() {
   };
 
   return (
-    <Card>
+    <Card className="border border-border shadow-sm">
       <form onSubmit={createPoll}>
         <CardHeader>
           <CardTitle>Create a New Poll</CardTitle>
@@ -249,9 +249,9 @@ export default function CreatePoll() {
             onClick={addOption}
             variant="outline"
             size="sm"
-            className="w-full border-dashed hover:border-primary/50"
+            className="w-full border-dashed border-blue-200 hover:bg-blue-50 hover:border-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/20"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4 mr-2 text-blue-600" />
             Add Option
           </Button>
         </CardContent>

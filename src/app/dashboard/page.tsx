@@ -145,65 +145,71 @@ export default function DashboardPage() {
       const pollIds = polls.map(poll => poll.id)
       console.log('Poll IDs:', pollIds);
       
-      // Use the original query format that was working before
-      const { data: voteCountsData, error: voteCountsError } = await supabase
+      // Modified approach without using .group()
+      const { data: votesData, error: votesError } = await supabase
         .from('votes')
-        .select('poll_id, count')
+        .select('poll_id')
         .in('poll_id', pollIds)
-        .group('poll_id')
 
-      if (voteCountsError) {
-        console.error('Error fetching vote counts:', voteCountsError)
+      if (votesError) {
+        console.error('Error fetching votes:', votesError)
       }
       
-      console.log('Vote counts data:', voteCountsData);
-      
-      // Create a map of poll_id to vote count
+      // Process votes data to count for each poll
       const voteCountsMap = {}
-      if (voteCountsData) {
-        console.log('Raw vote counts data:', JSON.stringify(voteCountsData));
-        voteCountsData.forEach(item => {
-          if (item && item.poll_id && item.count) {
-            voteCountsMap[item.poll_id] = parseInt(item.count);
-            console.log(`Mapped vote count for poll ${item.poll_id}: ${parseInt(item.count)}`);
+      if (votesData && votesData.length > 0) {
+        console.log(`Total votes found: ${votesData.length}`);
+        
+        // Count votes per poll
+        votesData.forEach(vote => {
+          if (vote.poll_id) {
+            voteCountsMap[vote.poll_id] = (voteCountsMap[vote.poll_id] || 0) + 1;
           }
         });
+        
+        console.log('Vote counts calculated:', voteCountsMap);
       }
       
-      // Fetch view counts with original format
-      const { data: viewCountsData, error: viewCountsError } = await supabase
+      // Fetch view counts with modified approach
+      const { data: viewsData, error: viewsError } = await supabase
         .from('poll_views')
-        .select('poll_id, count')
+        .select('poll_id')
         .in('poll_id', pollIds)
-        .group('poll_id')
 
-      if (viewCountsError) {
-        console.error('Error fetching view counts:', viewCountsError)
+      if (viewsError) {
+        console.error('Error fetching views:', viewsError)
       }
       
-      console.log('View counts data:', viewCountsData);
-      
-      // Create a map of poll_id to view count
+      // Process view data to count for each poll
       const viewCountsMap = {}
-      if (viewCountsData) {
-        console.log('Raw view counts data:', JSON.stringify(viewCountsData));
-        viewCountsData.forEach(item => {
-          if (item && item.poll_id && item.count) {
-            viewCountsMap[item.poll_id] = parseInt(item.count);
-            console.log(`Mapped view count for poll ${item.poll_id}: ${parseInt(item.count)}`);
+      if (viewsData && viewsData.length > 0) {
+        console.log(`Total views found: ${viewsData.length}`);
+        
+        // Count views per poll
+        viewsData.forEach(view => {
+          if (view.poll_id) {
+            viewCountsMap[view.poll_id] = (viewCountsMap[view.poll_id] || 0) + 1;
           }
         });
+        
+        console.log('View counts calculated:', viewCountsMap);
       }
 
       const now = new Date()
       
-      // Calculate total votes and views
-      const totalVotes = Object.keys(voteCountsMap).length > 0 
-        ? Object.values(voteCountsMap).reduce((a: number, b: number) => a + b, 0) as number
-        : 0;
-      const totalViews = Object.keys(viewCountsMap).length > 0 
-        ? Object.values(viewCountsMap).reduce((a: number, b: number) => a + b, 0) as number
-        : 0;
+      // Calculate total votes and views with a simpler approach to avoid TypeScript errors
+      let totalVotes = 0;
+      let totalViews = 0;
+      
+      // Sum up vote counts
+      Object.values(voteCountsMap).forEach(count => {
+        totalVotes += typeof count === 'number' ? count : 0;
+      });
+      
+      // Sum up view counts
+      Object.values(viewCountsMap).forEach(count => {
+        totalViews += typeof count === 'number' ? count : 0;
+      });
       
       console.log('Total votes:', totalVotes, 'Total views:', totalViews);
       
