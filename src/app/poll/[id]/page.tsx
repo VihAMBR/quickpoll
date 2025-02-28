@@ -7,7 +7,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { Poll, Option } from '@/types/database.types'
 import { useToast } from '@/components/ui/use-toast'
 import { NameDialog } from '@/components/ui/name-dialog'
-import { v4 as uuidv4 } from 'uuid'
+import { getDeviceFingerprint } from '@/lib/fingerprint'
 
 export default function PollPage({ params }: { params: { id: string } }) {
   console.log('Poll ID:', params.id);
@@ -227,20 +227,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
     // Get user session and client ID
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
-    let clientId = localStorage.getItem('anonymous_client_id')
+    const fingerprint = await getDeviceFingerprint()
     const userName = localStorage.getItem('anonymous_user_name')
-
-    // Clear invalid client ID
-    if (clientId && !isValidUUID(clientId)) {
-      localStorage.removeItem('anonymous_client_id')
-      clientId = null
-    }
-
-    // Generate new client ID if needed
-    if (!userId && !clientId) {
-      clientId = uuidv4()
-      localStorage.setItem('anonymous_client_id', clientId)
-    }
 
     // Show name dialog only if we don't have a username
     if (!userId && !userName) {
@@ -253,7 +241,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       .from('votes')
       .select('option_id')
       .eq('poll_id', params.id)
-      .eq(userId ? 'user_id' : 'client_id', userId || clientId || '')
+      .eq(userId ? 'user_id' : 'device_fingerprint', userId || fingerprint)
       .maybeSingle()
 
     if (error) {
@@ -268,8 +256,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
   }
 
   const handleNameSubmit = (name: string) => {
-    const clientId = `anon_${Date.now()}`
-    localStorage.setItem('anonymous_client_id', clientId)
     localStorage.setItem('anonymous_user_name', name)
     setShowNameDialog(false)
     checkUserVote()
@@ -292,39 +278,19 @@ export default function PollPage({ params }: { params: { id: string } }) {
       // Get user session and client ID
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
-      let clientId = localStorage.getItem('anonymous_client_id')
       const userName = localStorage.getItem('anonymous_user_name')
+      const fingerprint = await getDeviceFingerprint()
       
-      // Clear invalid client ID and generate new one if needed
-      if (!userId) {
-        if (!clientId || !isValidUUID(clientId)) {
-          // Generate a proper UUID
-          clientId = uuidv4()
-          localStorage.setItem('anonymous_client_id', clientId)
-        }
-        // Show name dialog for anonymous users without a name
-        if (!userName) {
-          setShowNameDialog(true)
-          return
-        }
-      }
-
-      // Ensure clientId is a valid UUID if we're using it
-      if (!userId && (!clientId || !isValidUUID(clientId))) {
-        console.error('Invalid client ID:', clientId)
-        toast({
-          title: "Error",
-          description: "There was an error with your session. Please try again.",
-          variant: "destructive"
-        })
-        localStorage.removeItem('anonymous_client_id')
+      // Show name dialog for anonymous users without a name
+      if (!userId && !userName) {
+        setShowNameDialog(true)
         return
       }
 
       // Log the current state
       console.log('Current state:', {
         userId,
-        clientId,
+        fingerprint,
         userName,
         pollId: params.id,
         optionId
@@ -335,7 +301,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
         .from('votes')
         .select('id')
         .eq('poll_id', params.id)
-        .eq(userId ? 'user_id' : 'client_id', userId || clientId || '')
+        .eq(userId ? 'user_id' : 'device_fingerprint', userId || fingerprint)
         .maybeSingle()
 
       if (checkError) {
@@ -351,7 +317,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       console.log('Checking vote:', {
         pollId: params.id,
         userId,
-        clientId,
+        fingerprint,
         existingVote
       })
 
@@ -371,19 +337,11 @@ export default function PollPage({ params }: { params: { id: string } }) {
         created_at: new Date().toISOString()
       }
 
-      // Add either user_id or client_id, but not both
+      // Add either user_id or device_fingerprint, but not both
       if (userId) {
-        Object.assign(voteData, { user_id: userId, client_id: null })
-      } else if (clientId && isValidUUID(clientId)) {
-        Object.assign(voteData, { user_id: null, client_id: clientId })
+        Object.assign(voteData, { user_id: userId, device_fingerprint: null })
       } else {
-        console.error('No valid user_id or client_id')
-        toast({
-          title: "Error",
-          description: "There was an error with your session. Please try again.",
-          variant: "destructive"
-        })
-        return
+        Object.assign(voteData, { user_id: null, device_fingerprint: fingerprint })
       }
 
       console.log('Submitting vote:', voteData)

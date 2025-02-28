@@ -22,7 +22,7 @@ export interface Vote {
   poll_id: string
   option_id: string
   user_id: string | null
-  client_id: string | null
+  device_fingerprint: string | null
   created_at: string
 }
 
