@@ -132,6 +132,26 @@ export default function MyPolls() {
                   </div>
                 </div>
               </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Created {new Date(poll.created_at).toLocaleDateString()}
+                    </p>
+                    {poll.end_date && (
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(poll.end_date) < new Date() 
+                          ? `Ended ${new Date(poll.end_date).toLocaleDateString()}`
+                          : `Ends ${new Date(poll.end_date).toLocaleDateString()}`
+                        }
+                      </p>
+                    )}
+                  </div>
+                  <Button asChild>
+                    <Link href={`/poll/${poll.id}`}>View Poll</Link>
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
           ))
         )}

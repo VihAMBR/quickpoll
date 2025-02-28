@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { QuestionType } from '@/types/database.types';
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Loader2, Calendar, Image as ImageIcon } from "lucide-react"
+import { Plus, Loader2, Calendar } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,8 +17,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { ImageUpload } from "@/components/ui/image-upload"
-import { Slider } from "@/components/ui/slider"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function CreatePoll() {
   const router = useRouter();
@@ -34,8 +31,6 @@ export default function CreatePoll() {
   const [userId, setUserId] = useState<string | null>(null);
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
   const [maxChoices, setMaxChoices] = useState(1);
-  const [questionType, setQuestionType] = useState<QuestionType>('multiple_choice');
-  const [ratingScaleMax, setRatingScaleMax] = useState(5);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -99,7 +94,7 @@ export default function CreatePoll() {
 
       if (!supabase) throw new Error('Supabase client not available');
 
-      // Create the poll with all fields that match the updated schema
+      // Create the poll with only multiple choice options
       const pollData = { 
         title, 
         description: description || null,
@@ -108,10 +103,9 @@ export default function CreatePoll() {
         require_auth: requireAuth,
         show_results: showResults,
         end_date: date ? date.toISOString() : null,
-        question_type: questionType,
+        question_type: 'multiple_choice',
         allow_multiple_choices: allowMultipleChoices,
-        max_choices: maxChoices,
-        rating_scale_max: questionType === 'rating' ? ratingScaleMax : null
+        max_choices: maxChoices
       };
       
       console.log('Poll data being sent:', pollData);
@@ -180,7 +174,7 @@ export default function CreatePoll() {
         <CardHeader>
           <CardTitle>Create a New Poll</CardTitle>
           <CardDescription>
-            Create a poll and share it with others to collect votes.
+            Create a multiple choice poll and share it with others to collect votes.
           </CardDescription>
         </CardHeader>
 
@@ -248,110 +242,69 @@ export default function CreatePoll() {
           </div>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Question Type</Label>
-              <Select value={questionType} onValueChange={(value: QuestionType) => setQuestionType(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
-                  <SelectItem value="true_false">True/False</SelectItem>
-                  <SelectItem value="short_answer">Short Answer</SelectItem>
-                  <SelectItem value="ranking">Ranking</SelectItem>
-                  <SelectItem value="rating">Rating Scale</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center justify-between space-x-2">
+              <Label>Allow Multiple Choices</Label>
+              <Switch
+                checked={allowMultipleChoices}
+                onCheckedChange={(checked) => {
+                  setAllowMultipleChoices(checked);
+                  if (!checked) setMaxChoices(1);
+                }}
+              />
             </div>
 
-            {questionType === 'multiple_choice' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between space-x-2">
-                  <Label>Allow Multiple Choices</Label>
-                  <Switch
-                    checked={allowMultipleChoices}
-                    onCheckedChange={(checked) => {
-                      setAllowMultipleChoices(checked);
-                      if (!checked) setMaxChoices(1);
-                    }}
-                  />
-                </div>
-
-                {allowMultipleChoices && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label>Maximum Choices</Label>
-                      <span className="text-sm text-muted-foreground">{maxChoices}</span>
-                    </div>
-                    <Slider
-                      value={[maxChoices]}
-                      min={1}
-                      max={options.length}
-                      step={1}
-                      onValueChange={([value]) => setMaxChoices(value)}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {questionType === 'rating' && (
+            {allowMultipleChoices && (
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <Label>Maximum Rating</Label>
-                  <span className="text-sm text-muted-foreground">{ratingScaleMax}</span>
+                  <Label>Maximum Choices</Label>
+                  <span className="text-sm text-muted-foreground">{maxChoices}</span>
                 </div>
-                <Slider
-                  value={[ratingScaleMax]}
-                  min={1}
-                  max={10}
-                  step={1}
-                  onValueChange={([value]) => setRatingScaleMax(value)}
+                <input
+                  type="range"
+                  min="1"
+                  max={options.length}
+                  value={maxChoices}
+                  onChange={(e) => setMaxChoices(parseInt(e.target.value))}
+                  className="w-full"
                 />
               </div>
             )}
 
-            {['multiple_choice', 'true_false', 'ranking'].includes(questionType) && (
-              <div className="space-y-2">
-                <Label>Options</Label>
-                <div className="space-y-4">
-                  {options.map((option, index) => (
-                    <div key={index} className="flex gap-4 items-start">
-                      <div className="flex-1">
-                        <Input
-                          type="text"
-                          value={option.text}
-                          onChange={(e) => updateOption(index, e.target.value)}
-                          required
-                          placeholder={`Option ${index + 1}`}
-                        />
-                      </div>
-                      {questionType !== 'true_false' && (
-                        <ImageUpload
-                          onImageUploaded={(url) => updateOptionImage(index, url)}
-                          onImageRemoved={() => removeOptionImage(index)}
-                          currentImage={option.image_url}
-                        />
-                      )}
+            <div className="space-y-2">
+              <Label>Options</Label>
+              <div className="space-y-4">
+                {options.map((option, index) => (
+                  <div key={index} className="flex gap-4 items-start">
+                    <div className="flex-1">
+                      <Input
+                        type="text"
+                        value={option.text}
+                        onChange={(e) => updateOption(index, e.target.value)}
+                        required
+                        placeholder={`Option ${index + 1}`}
+                      />
                     </div>
-                  ))}
-                </div>
+                    <ImageUpload
+                      onImageUploaded={(url) => updateOptionImage(index, url)}
+                      onImageRemoved={() => removeOptionImage(index)}
+                      currentImage={option.image_url}
+                    />
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
 
-          {['multiple_choice', 'ranking'].includes(questionType) && (
-            <Button
-              type="button"
-              onClick={addOption}
-              variant="outline"
-              size="sm"
-              className="w-full border-dashed hover:border-primary/50"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Option
-            </Button>
-          )}
+          <Button
+            type="button"
+            onClick={addOption}
+            variant="outline"
+            size="sm"
+            className="w-full border-dashed hover:border-primary/50"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Option
+          </Button>
         </CardContent>
 
         <CardFooter>

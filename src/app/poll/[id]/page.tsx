@@ -41,7 +41,13 @@ export default function PollPage({ params }: { params: { id: string } }) {
     const channelId = `poll_${params.id}`
     console.log('Setting up realtime subscriptions:', channelId)
 
-    const channel = supabase.channel(channelId)
+    const channel = supabase.channel(channelId, {
+      config: {
+        broadcast: {
+          self: true
+        }
+      }
+    })
       .on(
         'postgres_changes',
         {
@@ -52,40 +58,47 @@ export default function PollPage({ params }: { params: { id: string } }) {
         },
         async (payload) => {
           console.log('Received vote:', payload)
-          const vote = payload.new
-          
-          // Update vote counts
+          // Update vote counts immediately
           setVotes(prev => ({
             ...prev,
-            [vote.option_id]: (prev[vote.option_id] || 0) + 1
+            [payload.new.option_id]: (prev[payload.new.option_id] || 0) + 1
           }))
           setTotalVotes(prev => prev + 1)
-          console.log('Vote change detected:', payload)
+          
+          // Then fetch fresh vote counts
           if (!supabase) return
 
-          // Fetch fresh vote counts instead of incrementing/decrementing
-          const { data: votesData, error: votesError } = await supabase
-            .from('votes')
-            .select('option_id')
-            .eq('poll_id', params.id)
+          try {
+            // Fetch fresh vote counts to ensure accuracy
+            const { data: votesData, error: votesError } = await supabase
+              .from('votes')
+              .select('option_id')
+              .eq('poll_id', params.id)
 
-          if (votesError) {
-            console.error('Error fetching votes:', votesError)
-            return
+            if (votesError) {
+              console.error('Error fetching votes:', votesError)
+              return
+            }
+
+            // Count votes per option
+            const voteCounts: Record<string, number> = {}
+            options.forEach(option => {
+              voteCounts[option.id] = 0
+            })
+            
+            votesData?.forEach(vote => {
+              voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
+            })
+            
+            console.log('Updated vote counts:', voteCounts)
+            setVotes(voteCounts)
+            setTotalVotes(votesData?.length || 0)
+            
+            // Check if the current user's vote status has changed
+            await checkUserVote()
+          } catch (error) {
+            console.error('Error processing vote update:', error)
           }
-
-          // Count votes per option
-          const voteCounts: Record<string, number> = {}
-          votesData?.forEach(vote => {
-            voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
-          })
-          
-          console.log('Updated vote counts:', voteCounts)
-          setVotes(voteCounts)
-          setTotalVotes(votesData?.length || 0)
-          
-          // Check if the current user's vote status has changed
-          await checkUserVote()
         }
       )
       // Subscribe to poll changes
