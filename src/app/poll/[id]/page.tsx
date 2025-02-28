@@ -21,6 +21,8 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const { toast } = useToast()
+  const [channelSubscribed, setChannelSubscribed] = useState(false)
+  const [updateCounter, setUpdateCounter] = useState(0)
 
   useEffect(() => {
     if (!supabase) {
@@ -34,18 +36,18 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
 
     loadData()
+  }, [params.id])
 
-    if (!supabase) return
-
-    // Setup realtime subscriptions with broadcast
-    const channelId = `poll_${params.id}`
+  useEffect(() => {
+    if (!supabase || !params.id) return
+    
+    // Setup realtime subscriptions with broadcast and self-receiving
+    const channelId = `poll_${params.id}_${Date.now()}`
     console.log('Setting up realtime subscriptions:', channelId)
 
     const channel = supabase.channel(channelId, {
       config: {
-        broadcast: {
-          self: true
-        }
+        broadcast: { self: true }
       }
     })
       .on(
@@ -57,51 +59,12 @@ export default function PollPage({ params }: { params: { id: string } }) {
           filter: `poll_id=eq.${params.id}`
         },
         async (payload) => {
-          console.log('Received vote:', payload)
-          // Update vote counts immediately
-          setVotes(prev => ({
-            ...prev,
-            [payload.new.option_id]: (prev[payload.new.option_id] || 0) + 1
-          }))
-          setTotalVotes(prev => prev + 1)
+          console.log('Received real-time vote:', payload)
           
-          // Then fetch fresh vote counts
-          if (!supabase) return
-
-          try {
-            // Fetch fresh vote counts to ensure accuracy
-            const { data: votesData, error: votesError } = await supabase
-              .from('votes')
-              .select('option_id')
-              .eq('poll_id', params.id)
-
-            if (votesError) {
-              console.error('Error fetching votes:', votesError)
-              return
-            }
-
-            // Count votes per option
-            const voteCounts: Record<string, number> = {}
-            options.forEach(option => {
-              voteCounts[option.id] = 0
-            })
-            
-            votesData?.forEach(vote => {
-              voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
-            })
-            
-            console.log('Updated vote counts:', voteCounts)
-            setVotes(voteCounts)
-            setTotalVotes(votesData?.length || 0)
-            
-            // Check if the current user's vote status has changed
-            await checkUserVote()
-          } catch (error) {
-            console.error('Error processing vote update:', error)
-          }
+          // Force a full re-fetch of vote counts
+          await refreshVoteCounts()
         }
       )
-      // Subscribe to poll changes
       .on(
         'postgres_changes',
         {
@@ -115,30 +78,25 @@ export default function PollPage({ params }: { params: { id: string } }) {
           if (payload.eventType === 'UPDATE') {
             // Update poll data
             setPoll(payload.new as Poll)
-          } else {
-            // For other changes, refresh all data
-            fetchPollData()
+            // Force re-render to reflect changes
+            setUpdateCounter(prev => prev + 1)
           }
         }
       )
 
-    // Subscribe to presence for active users (optional)
+    // Subscribe to channel
     channel.subscribe(async (status) => {
       console.log('Subscription status:', status)
       if (status === 'SUBSCRIBED') {
         console.log('Successfully subscribed to real-time updates')
-        // Initial data fetch after successful subscription
-        await fetchPollData()
-        await checkUserVote()
+        setChannelSubscribed(true)
       }
     })
 
-    const cleanup = () => {
+    return () => {
       console.log('Cleaning up realtime subscription:', channelId)
       channel.unsubscribe()
     }
-
-    return cleanup
   }, [params.id])
 
   const fetchPollData = async () => {
@@ -172,7 +130,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       setPoll(pollData)
 
       // Check if user is admin
-      setIsAdmin(authData.session?.user?.id === pollData.created_by)
+      setIsAdmin(authData.session?.user?.id === pollData.user_id)
 
       // Fetch options
       const { data: optionsData, error: optionsError } = await supabase
@@ -192,30 +150,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       setOptions(optionsData || [])
 
       // Fetch votes
-      const { data: votesData, error: votesError } = await supabase
-        .from('votes')
-        .select('option_id')
-        .eq('poll_id', params.id)
-
-      if (votesError) {
-        console.error('Error fetching votes:', votesError)
-        throw votesError
-      }
-
-      // Initialize vote counts for all options to 0
-      const voteCounts: Record<string, number> = {}
-      optionsData.forEach(option => {
-        voteCounts[option.id] = 0
-      })
-
-      // Count actual votes
-      votesData?.forEach(vote => {
-        voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
-      })
-      
-      console.log('Vote counts:', voteCounts)
-      setVotes(voteCounts)
-      setTotalVotes(votesData?.length || 0)
+      await fetchVoteCounts()
     } catch (error) {
       console.error('Error fetching poll data:', error)
       toast({
@@ -225,6 +160,91 @@ export default function PollPage({ params }: { params: { id: string } }) {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchVoteCounts = async () => {
+    if (!supabase || !params.id) return
+
+    try {
+      console.log('Fetching latest vote counts...')
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
+        .select('option_id')
+        .eq('poll_id', params.id)
+
+      if (votesError) {
+        console.error('Error fetching votes:', votesError)
+        return
+      }
+
+      // Initialize vote counts for all options to 0
+      const voteCounts: Record<string, number> = {}
+      options.forEach(option => {
+        voteCounts[option.id] = 0
+      })
+
+      // Count actual votes
+      votesData?.forEach(vote => {
+        voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
+      })
+      
+      console.log('Updated vote counts:', voteCounts, 'Total votes:', votesData?.length || 0)
+      
+      // Update state with the fresh counts
+      setVotes({...voteCounts})
+      setTotalVotes(votesData?.length || 0)
+      
+    } catch (error) {
+      console.error('Error fetching vote counts:', error)
+    }
+  }
+
+  // Add a dedicated function to refresh vote counts
+  const refreshVoteCounts = async () => {
+    console.log('Refreshing vote counts from real-time update...')
+    try {
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
+        .select('option_id')
+        .eq('poll_id', params.id)
+
+      if (votesError) {
+        console.error('Error fetching votes:', votesError)
+        return
+      }
+
+      // Create a fresh vote count object
+      const freshVoteCounts: Record<string, number> = {}
+      options.forEach(option => {
+        freshVoteCounts[option.id] = 0
+      })
+
+      // Count votes from the database
+      votesData?.forEach(vote => {
+        freshVoteCounts[vote.option_id] = (freshVoteCounts[vote.option_id] || 0) + 1
+      })
+      
+      console.log('Refreshed vote counts:', freshVoteCounts, 'Total votes:', votesData?.length || 0)
+      
+      // Explicitly update state with new objects to ensure React detects changes
+      setVotes({...freshVoteCounts})
+      setTotalVotes(votesData?.length || 0)
+      // Force a re-render to ensure UI updates
+      setUpdateCounter(prevCounter => {
+        console.log('Incrementing update counter from', prevCounter, 'to', prevCounter + 1)
+        return prevCounter + 1
+      })
+      
+      // Force re-render (this is a hack but sometimes needed)
+      setTimeout(() => {
+        setUpdateCounter(prevCounter => {
+          console.log('Additional counter increment to force re-render')
+          return prevCounter + 1
+        })
+      }, 100)
+    } catch (error) {
+      console.error('Error refreshing vote counts:', error)
     }
   }
 
@@ -278,16 +298,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
     if (!supabase) return
     
     try {
-      // Check if poll has ended
-      if (poll?.end_date && new Date(poll.end_date) < new Date()) {
-        toast({
-          title: "Error",
-          description: "This poll has ended",
-          variant: "destructive"
-        })
-        return
-      }
-
       // Get user session and client ID
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
@@ -379,11 +389,9 @@ export default function PollPage({ params }: { params: { id: string } }) {
       // Update local state
       setHasVoted(true)
       setSelectedOption(optionId)
-      setVotes(prev => ({
-        ...prev,
-        [optionId]: (prev[optionId] || 0) + 1
-      }))
-      setTotalVotes(prev => prev + 1)
+      
+      // Refresh vote counts after submitting vote
+      await refreshVoteCounts()
 
       toast({
         title: "Success",
@@ -399,6 +407,9 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Use updateCounter in the UI to ensure re-renders
+  console.log('Render triggered, update counter:', updateCounter)
+
   return loading ? (
     <LoadingSpinner />
   ) : (
@@ -406,6 +417,7 @@ export default function PollPage({ params }: { params: { id: string } }) {
       <NameDialog open={showNameDialog} onSubmit={handleNameSubmit} />
       <div className="w-full max-w-2xl">
         <PollVoting
+          key={`poll-${params.id}-votes-${totalVotes}-update-${updateCounter}`}
           poll={poll}
           pollId={params.id}
           options={options}

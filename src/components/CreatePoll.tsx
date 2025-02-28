@@ -7,27 +7,21 @@ import { supabase } from '@/lib/supabase';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Loader2, Calendar } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
-import { format } from 'date-fns';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"
-import { ImageUpload } from "@/components/ui/image-upload"
 
 export default function CreatePoll() {
   const router = useRouter();
   const { toast } = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [options, setOptions] = useState<Array<{ text: string; image_url?: string }>>([{ text: '' }, { text: '' }]);
+  const [options, setOptions] = useState<Array<{ text: string }>>([{ text: '' }, { text: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requireAuth, setRequireAuth] = useState(false);
   const [showResults, setShowResults] = useState(true);
-  const [date, setDate] = useState<Date>();
   const [userId, setUserId] = useState<string | null>(null);
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
   const [maxChoices, setMaxChoices] = useState(1);
@@ -66,18 +60,6 @@ export default function CreatePoll() {
     setOptions(newOptions);
   };
 
-  const updateOptionImage = (index: number, url: string) => {
-    const newOptions = [...options];
-    newOptions[index] = { ...newOptions[index], image_url: url };
-    setOptions(newOptions);
-  };
-
-  const removeOptionImage = (index: number) => {
-    const newOptions = [...options];
-    delete newOptions[index].image_url;
-    setOptions(newOptions);
-  };
-
   const createPoll = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -102,7 +84,6 @@ export default function CreatePoll() {
         is_public: true,
         require_auth: requireAuth,
         show_results: showResults,
-        end_date: date ? date.toISOString() : null,
         question_type: 'multiple_choice',
         allow_multiple_choices: allowMultipleChoices,
         max_choices: maxChoices
@@ -133,8 +114,7 @@ export default function CreatePoll() {
         .filter(option => option.text.trim())
         .map(option => ({
           poll_id: poll.id,
-          text: option.text,
-          image_url: option.image_url || null
+          text: option.text
         }));
 
       console.log('Options data:', optionsData);
@@ -215,32 +195,6 @@ export default function CreatePoll() {
             />
           </div>
 
-          <div className="flex flex-col space-y-2">
-            <Label>End Date (Optional)</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "justify-start text-left font-normal",
-                    !date && "text-muted-foreground"
-                  )}
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : "Pick a date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
           <div className="space-y-4">
             <div className="flex items-center justify-between space-x-2">
               <Label>Allow Multiple Choices</Label>
@@ -284,11 +238,6 @@ export default function CreatePoll() {
                         placeholder={`Option ${index + 1}`}
                       />
                     </div>
-                    <ImageUpload
-                      onImageUploaded={(url) => updateOptionImage(index, url)}
-                      onImageRemoved={() => removeOptionImage(index)}
-                      currentImage={option.image_url}
-                    />
                   </div>
                 ))}
               </div>

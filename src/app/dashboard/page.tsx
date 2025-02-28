@@ -67,7 +67,7 @@ export default function DashboardPage() {
       const { data: polls } = await supabase
         .from('polls')
         .select('*, votes(count)')
-        .eq('created_by', userId)
+        .eq('user_id', userId)
 
       const now = new Date()
       const stats: DashboardStats = {
