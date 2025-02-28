@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,8 +53,17 @@ export function PollVoting({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [localVotes, setLocalVotes] = useState(votes);
+  const [localTotalVotes, setLocalTotalVotes] = useState(totalVotes);
   const { toast } = useToast();
   const router = useRouter();
+
+  // Update local state when props change
+  useEffect(() => {
+    console.log("PollVoting received new props:", { votes, totalVotes });
+    setLocalVotes(votes);
+    setLocalTotalVotes(totalVotes);
+  }, [votes, totalVotes]);
 
   // Get the shortened URL for sharing
   const getShareableUrl = () => {
@@ -190,8 +199,8 @@ export function PollVoting({
         return (
           <div className="space-y-4">
             {options.map((option) => {
-              const voteCount = votes[option.id] || 0;
-              const votePercentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+              const voteCount = localVotes[option.id] || 0;
+              const votePercentage = localTotalVotes > 0 ? (voteCount / localTotalVotes) * 100 : 0;
               const isSelected = poll.allow_multiple_choices 
                 ? selectedChoices.has(option.id)
                 : selectedOption === option.id;
@@ -275,18 +284,18 @@ export function PollVoting({
     return (
       <>
         {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 w-full max-w-screen-2xl mx-auto">
           {/* Poll Information and Voting Panel */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <Card className="shadow-lg overflow-hidden h-full">
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-xl">
+                    <CardTitle className="flex items-center gap-2 text-2xl">
                       {poll.title}
                       {poll.require_auth && <Lock className="h-4 w-4 text-muted-foreground" />}
                     </CardTitle>
-                    <CardDescription>{poll.description || "Cast your vote and see real-time results"}</CardDescription>
+                    <CardDescription className="text-base">{poll.description || "Cast your vote and see real-time results"}</CardDescription>
                   </div>
                   <Button
                     variant="outline"
@@ -301,40 +310,44 @@ export function PollVoting({
               </CardHeader>
               
               <CardContent className="space-y-6 pb-6">
-                {/* Voting options with real-time results always visible */}
-                <div className="space-y-4">
-                  {options.map((option) => {
-                    const voteCount = votes[option.id] || 0;
-                    const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
-                    const isSelected = selectedOption === option.id;
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Voting options with real-time results always visible */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-lg">Results</h3>
+                    {options.map((option) => {
+                      const voteCount = localVotes[option.id] || 0;
+                      const percentage = localTotalVotes > 0 ? (voteCount / localTotalVotes) * 100 : 0;
+                      const isSelected = selectedOption === option.id;
 
-                    return (
-                      <div key={option.id} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{option.text}</span>
-                          <span className="text-sm text-muted-foreground">{voteCount} votes</span>
+                      return (
+                        <div key={option.id} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{option.text}</span>
+                            <span className="text-sm text-muted-foreground">{voteCount} votes</span>
+                          </div>
+                          <Progress value={percentage} className="h-3" />
+                          <div className="text-sm text-muted-foreground">
+                            {percentage.toFixed(1)}%
+                          </div>
                         </div>
-                        <Progress value={percentage} />
-                        <div className="text-sm text-muted-foreground">
-                          {percentage.toFixed(1)}%
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                <div className="pt-4">
-                  <div className="text-sm font-medium mb-2">Total Votes: {totalVotes}</div>
-                </div>
+                      );
+                    })}
+                    
+                    <div className="pt-4">
+                      <div className="text-base font-medium mb-2">Total Votes: {localTotalVotes}</div>
+                    </div>
+                  </div>
 
-                {/* Charts Section */}
-                <div className="pt-6 border-t">
-                  <PollCharts 
-                    options={options}
-                    votes={votes}
-                    totalVotes={totalVotes}
-                    metrics={poll.metrics}
-                  />
+                  {/* Charts Section */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-lg">Visualization</h3>
+                    <PollCharts 
+                      options={options}
+                      votes={localVotes}
+                      totalVotes={localTotalVotes}
+                      metrics={poll.metrics}
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { PollVoting } from "@/components/PollVoting"
 import { supabase } from '@/lib/supabase'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -10,7 +10,6 @@ import { NameDialog } from '@/components/ui/name-dialog'
 import { getDeviceFingerprint } from '@/lib/fingerprint'
 
 export default function PollPage({ params }: { params: { id: string } }) {
-  console.log('Poll ID:', params.id);
   const [poll, setPoll] = useState<Poll | null>(null)
   const [options, setOptions] = useState<Option[]>([])
   const [votes, setVotes] = useState<Record<string, number>>({})
@@ -21,153 +20,14 @@ export default function PollPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const { toast } = useToast()
-  const [channelSubscribed, setChannelSubscribed] = useState(false)
   const [updateCounter, setUpdateCounter] = useState(0)
+  const [componentKey, setComponentKey] = useState(Date.now())
 
-  useEffect(() => {
-    if (!supabase) {
-      console.error('No Supabase client available')
-      return
-    }
-
-    const loadData = async () => {
-      await fetchPollData()
-      await checkUserVote()
-    }
-
-    loadData()
-  }, [params.id])
-
-  useEffect(() => {
-    if (!supabase || !params.id) return
-    
-    // Setup realtime subscriptions with broadcast and self-receiving
-    const channelId = `poll_${params.id}_${Date.now()}`
-    console.log('Setting up realtime subscriptions:', channelId)
-
-    const channel = supabase.channel(channelId, {
-      config: {
-        broadcast: { self: true }
-      }
-    })
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'votes',
-          filter: `poll_id=eq.${params.id}`
-        },
-        async (payload) => {
-          console.log('Received real-time vote:', payload)
-          
-          // Force a full re-fetch of vote counts
-          await refreshVoteCounts()
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'polls',
-          filter: `id=eq.${params.id}`
-        },
-        (payload) => {
-          console.log('Poll change detected:', payload)
-          if (payload.eventType === 'UPDATE') {
-            // Update poll data
-            setPoll(payload.new as Poll)
-            // Force re-render to reflect changes
-            setUpdateCounter(prev => prev + 1)
-          }
-        }
-      )
-
-    // Subscribe to channel
-    channel.subscribe(async (status) => {
-      console.log('Subscription status:', status)
-      if (status === 'SUBSCRIBED') {
-        console.log('Successfully subscribed to real-time updates')
-        setChannelSubscribed(true)
-      }
-    })
-
-    return () => {
-      console.log('Cleaning up realtime subscription:', channelId)
-      channel.unsubscribe()
-    }
-  }, [params.id])
-
-  const fetchPollData = async () => {
-    if (!supabase) {
-      console.error('Supabase client not available')
-      return
-    }
-    
-    try {
-      // First, check if Supabase is initialized
-      const { data: authData, error: authError } = await supabase.auth.getSession()
-      if (authError) {
-        console.error('Auth error:', authError)
-        return
-      }
-      console.log('Auth data:', authData)
-
-      // Fetch poll
-      const { data: pollData, error: pollError } = await supabase
-        .from('polls')
-        .select('*')
-        .eq('id', params.id)
-        .single()
-
-      if (pollError) {
-        console.error('Error fetching poll:', pollError)
-        throw pollError
-      }
-      
-      console.log('Poll data:', pollData)
-      setPoll(pollData)
-
-      // Check if user is admin
-      setIsAdmin(authData.session?.user?.id === pollData.user_id)
-
-      // Fetch options
-      const { data: optionsData, error: optionsError } = await supabase
-        .from('poll_options')
-        .select('id, poll_id, text')
-        .eq('poll_id', params.id)
-
-      if (optionsError) {
-        console.error('Error fetching options:', optionsError)
-        throw optionsError
-      }
-      
-      console.log('Options data:', optionsData)
-      if (!optionsData || optionsData.length === 0) {
-        console.warn('No options found for poll:', params.id)
-      }
-      setOptions(optionsData || [])
-
-      // Fetch votes
-      await fetchVoteCounts()
-    } catch (error) {
-      console.error('Error fetching poll data:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load poll data",
-        variant: "destructive"
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchVoteCounts = async () => {
+  // Memoize the fetchVoteCounts function to avoid recreating it on each render
+  const fetchVoteCounts = useCallback(async () => {
     if (!supabase || !params.id) return
 
     try {
-      console.log('Fetching latest vote counts...')
       const { data: votesData, error: votesError } = await supabase
         .from('votes')
         .select('option_id')
@@ -189,8 +49,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
         voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1
       })
       
-      console.log('Updated vote counts:', voteCounts, 'Total votes:', votesData?.length || 0)
-      
       // Update state with the fresh counts
       setVotes({...voteCounts})
       setTotalVotes(votesData?.length || 0)
@@ -198,11 +56,71 @@ export default function PollPage({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error('Error fetching vote counts:', error)
     }
-  }
+  }, [params.id, options])
 
-  // Add a dedicated function to refresh vote counts
-  const refreshVoteCounts = async () => {
-    console.log('Refreshing vote counts from real-time update...')
+  const fetchPollData = useCallback(async () => {
+    if (!supabase) {
+      console.error('Supabase client not available')
+      return
+    }
+    
+    try {
+      // First, check if Supabase is initialized
+      const { data: authData, error: authError } = await supabase.auth.getSession()
+      if (authError) {
+        console.error('Auth error:', authError)
+        return
+      }
+
+      // Fetch poll
+      const { data: pollData, error: pollError } = await supabase
+        .from('polls')
+        .select('*')
+        .eq('id', params.id)
+        .single()
+
+      if (pollError) {
+        console.error('Error fetching poll:', pollError)
+        throw pollError
+      }
+      
+      setPoll(pollData)
+
+      // Check if user is admin
+      setIsAdmin(authData.session?.user?.id === pollData.user_id)
+
+      // Fetch options
+      const { data: optionsData, error: optionsError } = await supabase
+        .from('poll_options')
+        .select('id, poll_id, text')
+        .eq('poll_id', params.id)
+
+      if (optionsError) {
+        console.error('Error fetching options:', optionsError)
+        throw optionsError
+      }
+      
+      if (!optionsData || optionsData.length === 0) {
+        console.warn('No options found for poll:', params.id)
+      }
+      setOptions(optionsData || [])
+
+      // Fetch votes
+      await fetchVoteCounts()
+    } catch (error) {
+      console.error('Error fetching poll data:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load poll data",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [params.id, fetchVoteCounts, toast])
+
+  // Memoize the refreshVoteCounts function
+  const refreshVoteCounts = useCallback(async () => {
     try {
       const { data: votesData, error: votesError } = await supabase
         .from('votes')
@@ -225,36 +143,23 @@ export default function PollPage({ params }: { params: { id: string } }) {
         freshVoteCounts[vote.option_id] = (freshVoteCounts[vote.option_id] || 0) + 1
       })
       
-      console.log('Refreshed vote counts:', freshVoteCounts, 'Total votes:', votesData?.length || 0)
-      
       // Explicitly update state with new objects to ensure React detects changes
       setVotes({...freshVoteCounts})
       setTotalVotes(votesData?.length || 0)
-      // Force a re-render to ensure UI updates
-      setUpdateCounter(prevCounter => {
-        console.log('Incrementing update counter from', prevCounter, 'to', prevCounter + 1)
-        return prevCounter + 1
-      })
       
-      // Force re-render (this is a hack but sometimes needed)
-      setTimeout(() => {
-        setUpdateCounter(prevCounter => {
-          console.log('Additional counter increment to force re-render')
-          return prevCounter + 1
-        })
-      }, 100)
+      // Force re-render to ensure UI updates
+      setUpdateCounter(prev => prev + 1)
+      
+      // Force a complete component remount with a new key for admin view
+      if (isAdmin) {
+        setComponentKey(Date.now())
+      }
     } catch (error) {
       console.error('Error refreshing vote counts:', error)
     }
-  }
+  }, [params.id, options, isAdmin])
 
-  // Validate if a string is a valid UUID
-  const isValidUUID = (uuid: string) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    return uuidRegex.test(uuid)
-  }
-
-  const checkUserVote = async () => {
+  const checkUserVote = useCallback(async () => {
     if (!supabase) return
     
     // Get user session and client ID
@@ -286,7 +191,70 @@ export default function PollPage({ params }: { params: { id: string } }) {
       setHasVoted(true)
       setSelectedOption(data.option_id)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (!supabase) {
+      console.error('No Supabase client available')
+      return
+    }
+
+    const loadData = async () => {
+      await fetchPollData()
+      await checkUserVote()
+    }
+
+    loadData()
+  }, [params.id, fetchPollData, checkUserVote])
+
+  useEffect(() => {
+    if (!supabase || !params.id) return
+    
+    // Setup realtime subscriptions with broadcast and self-receiving
+    const channelId = `poll_${params.id}_${Date.now()}`
+    
+    const channel = supabase.channel(channelId, {
+      config: {
+        broadcast: { self: true }
+      }
+    })
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'votes',
+          filter: `poll_id=eq.${params.id}`
+        },
+        async () => {
+          await refreshVoteCounts()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'polls',
+          filter: `id=eq.${params.id}`
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            // Update poll data
+            setPoll(payload.new as Poll)
+            // Force re-render to reflect changes
+            setUpdateCounter(prev => prev + 1)
+          }
+        }
+      )
+
+    // Subscribe to channel
+    channel.subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [params.id, refreshVoteCounts])
 
   const handleNameSubmit = (name: string) => {
     localStorage.setItem('anonymous_user_name', name)
@@ -310,15 +278,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
         return
       }
 
-      // Log the current state
-      console.log('Current state:', {
-        userId,
-        fingerprint,
-        userName,
-        pollId: params.id,
-        optionId
-      })
-
       // Check for existing vote
       const { data: existingVote, error: checkError } = await supabase
         .from('votes')
@@ -336,13 +295,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
         })
         return
       }
-
-      console.log('Checking vote:', {
-        pollId: params.id,
-        userId,
-        fingerprint,
-        existingVote
-      })
 
       if (existingVote) {
         toast({
@@ -367,8 +319,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
         Object.assign(voteData, { user_id: null, device_fingerprint: fingerprint })
       }
 
-      console.log('Submitting vote:', voteData)
-
       const { data: insertData, error: insertError } = await supabase
         .from('votes')
         .insert([voteData])
@@ -383,8 +333,6 @@ export default function PollPage({ params }: { params: { id: string } }) {
         })
         return
       }
-
-      console.log('Vote submitted successfully:', insertData)
 
       // Update local state
       setHasVoted(true)
@@ -407,17 +355,14 @@ export default function PollPage({ params }: { params: { id: string } }) {
     }
   }
 
-  // Use updateCounter in the UI to ensure re-renders
-  console.log('Render triggered, update counter:', updateCounter)
-
   return loading ? (
     <LoadingSpinner />
   ) : (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
       <NameDialog open={showNameDialog} onSubmit={handleNameSubmit} />
-      <div className="w-full max-w-2xl">
+      <div className={`w-full ${isAdmin ? 'max-w-full px-4' : 'max-w-2xl'}`}>
         <PollVoting
-          key={`poll-${params.id}-votes-${totalVotes}-update-${updateCounter}`}
+          key={isAdmin ? componentKey : `poll-${params.id}-votes-${totalVotes}-update-${updateCounter}`}
           poll={poll}
           pollId={params.id}
           options={options}
