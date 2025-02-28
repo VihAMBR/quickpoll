@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { supabase } from '@/lib/supabase'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useRouter } from 'next/navigation'
 
 interface AuthModalProps {
@@ -36,6 +36,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Sign in to your account</DialogTitle>
+          <DialogDescription>
+            Enter your email below to sign in to your account or create a new one.
+          </DialogDescription>
+        </DialogHeader>
         <Auth
           supabaseClient={supabase!}
           appearance={{

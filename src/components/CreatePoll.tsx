@@ -97,30 +97,42 @@ export default function CreatePoll() {
         return;
       }
 
-      // Create the poll
-      const pollData = { 
-        title, 
-        description,
-        require_auth: requireAuth,
-        show_results: showResults,
-        end_date: date,
-        created_by: userId,
-        created_at: new Date().toISOString(),
-        allow_multiple_choices: allowMultipleChoices,
-        max_choices: maxChoices,
-        question_type: questionType,
-        rating_scale_max: questionType === 'rating' ? ratingScaleMax : null
-      };
-
       if (!supabase) throw new Error('Supabase client not available');
 
+      // Create the poll with all fields that match the updated schema
+      const pollData = { 
+        title, 
+        description: description || null,
+        user_id: userId,
+        is_public: true,
+        require_auth: requireAuth,
+        show_results: showResults,
+        end_date: date ? date.toISOString() : null,
+        question_type: questionType,
+        allow_multiple_choices: allowMultipleChoices,
+        max_choices: maxChoices,
+        rating_scale_max: questionType === 'rating' ? ratingScaleMax : null
+      };
+      
+      console.log('Poll data being sent:', pollData);
+        
       const { data: poll, error: pollError } = await supabase
         .from('polls')
         .insert(pollData)
         .select()
         .single();
 
-      if (pollError) throw pollError;
+      if (pollError) {
+        console.error('Poll creation error details:', {
+          message: pollError.message,
+          details: pollError.details,
+          hint: pollError.hint,
+          code: pollError.code
+        });
+        throw pollError;
+      }
+
+      console.log('Poll created successfully:', poll);
 
       // Create the options
       const optionsData = options
@@ -128,14 +140,21 @@ export default function CreatePoll() {
         .map(option => ({
           poll_id: poll.id,
           text: option.text,
-          image_url: option.image_url
+          image_url: option.image_url || null
         }));
 
-      const { error: optionsError } = await supabase
-        .from('poll_options')
-        .insert(optionsData);
+      console.log('Options data:', optionsData);
 
-      if (optionsError) throw optionsError;
+      if (optionsData.length > 0) {
+        const { error: optionsError } = await supabase
+          .from('poll_options')
+          .insert(optionsData);
+
+        if (optionsError) {
+          console.error('Options creation error:', optionsError);
+          throw optionsError;
+        }
+      }
 
       toast({
         title: 'Success!',
@@ -143,11 +162,11 @@ export default function CreatePoll() {
       });
 
       router.push(`/poll/${poll.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating poll:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create poll. Please try again.',
+        description: error.message || 'Failed to create poll. Please try again.',
         variant: 'destructive'
       });
     } finally {
