@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Trash2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -21,7 +21,6 @@ export default function CreatePoll() {
   const [options, setOptions] = useState<Array<{ text: string }>>([{ text: '' }, { text: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requireAuth, setRequireAuth] = useState(false);
-  const [showResults, setShowResults] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
   const [maxChoices, setMaxChoices] = useState(1);
@@ -60,6 +59,26 @@ export default function CreatePoll() {
     setOptions(newOptions);
   };
 
+  const deleteOption = (index: number) => {
+    if (options.length <= 2) {
+      toast({
+        title: "Cannot Remove",
+        description: "At least two options are required for a poll",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const newOptions = [...options];
+    newOptions.splice(index, 1);
+    setOptions(newOptions);
+    
+    // Adjust maxChoices if needed
+    if (allowMultipleChoices && maxChoices > newOptions.length) {
+      setMaxChoices(newOptions.length);
+    }
+  };
+
   const createPoll = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -83,7 +102,7 @@ export default function CreatePoll() {
         user_id: userId,
         is_public: true,
         require_auth: requireAuth,
-        show_results: showResults,
+        show_results: true, // Always show results after voting
         question_type: 'multiple_choice',
         allow_multiple_choices: allowMultipleChoices,
         max_choices: maxChoices
@@ -187,14 +206,6 @@ export default function CreatePoll() {
             />
           </div>
 
-          <div className="flex items-center justify-between space-x-2">
-            <Label>Show Results Before Voting</Label>
-            <Switch
-              checked={showResults}
-              onCheckedChange={setShowResults}
-            />
-          </div>
-
           <div className="space-y-4">
             <div className="flex items-center justify-between space-x-2">
               <Label>Allow Multiple Choices</Label>
@@ -228,7 +239,7 @@ export default function CreatePoll() {
               <Label>Options</Label>
               <div className="space-y-4">
                 {options.map((option, index) => (
-                  <div key={index} className="flex gap-4 items-start">
+                  <div key={index} className="flex gap-2 items-start">
                     <div className="flex-1">
                       <Input
                         type="text"
@@ -238,6 +249,16 @@ export default function CreatePoll() {
                         placeholder={`Option ${index + 1}`}
                       />
                     </div>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => deleteOption(index)}
+                      className="border-red-200 hover:bg-red-50 hover:border-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+                      title="Delete option"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
                   </div>
                 ))}
               </div>

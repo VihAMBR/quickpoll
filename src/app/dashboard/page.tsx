@@ -41,12 +41,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      if (!supabase) {
-        router.push('/')
-        return
-      }
-      
       try {
+        if (!supabase) {
+          console.error('Supabase client not available');
+          return;
+        }
+        
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) {
           // Redirect to login if not authenticated
@@ -62,6 +62,9 @@ export default function DashboardPage() {
         console.log('User authenticated, fetching dashboard data');
         fetchDashboardData(session.user.id)
 
+        // Track if this is a visibility change or initial load
+        let tabSwitchOccurred = false;
+        
         // Setup real-time subscription for votes
         const channel = supabase.channel('dashboard_votes')
           .on(
@@ -72,14 +75,31 @@ export default function DashboardPage() {
               table: 'votes'
             },
             () => {
-              console.log('Vote change detected, refreshing dashboard data')
-              fetchDashboardData(session.user.id)
+              // Only refresh if this is not a tab switch (visibility change)
+              if (!tabSwitchOccurred) {
+                console.log('Vote change detected, refreshing dashboard data')
+                fetchDashboardData(session.user.id)
+              }
             }
           )
           .subscribe()
+          
+        // Listen for visibility changes (tab switching)
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            tabSwitchOccurred = true;
+            // Reset the flag after a short delay
+            setTimeout(() => {
+              tabSwitchOccurred = false;
+            }, 1000);
+          }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-          channel.unsubscribe()
+          channel.unsubscribe();
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
         }
       } catch (error) {
         console.error('Error in authentication check:', error);
@@ -322,7 +342,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="border border-border shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Polls</CardTitle>
@@ -382,17 +402,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Security notice */}
-        <Card className="bg-blue-50 border-border shadow-sm dark:bg-blue-950/20">
-          <CardHeader className="flex flex-row items-center space-y-0 pb-2">
-            <Shield className="h-5 w-5 text-blue-600 mr-2" />
-            <CardTitle className="text-sm font-medium">Security Notice</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            <p>Your polls are secured and all data is encrypted. We use industry-standard security practices to protect your information.</p>
-          </CardContent>
-        </Card>
 
         {/* Poll Lists */}
         <Tabs defaultValue="recent" className="space-y-4">
